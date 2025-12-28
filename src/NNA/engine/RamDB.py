@@ -1,6 +1,6 @@
 import json
 import sqlite3
-import numpy as np
+#import numpy as np
 #from tabulate import tabulate
 from datetime import datetime
 from pathlib import Path
@@ -9,19 +9,40 @@ import os
 import inspect
 import time
 class RamDB:
-    def __init__(self):
-        self.conn = sqlite3.connect(':memory:', isolation_level=None)
-        self.cursor = self.conn.cursor()
-        self.cursor.execute("PRAGMA page_size = 16384")
-        self.cursor.execute("PRAGMA cache_size = -20000")  # ✅ Set cache size ONCE when initializing
-        self.cursor.execute("PRAGMA synchronous = OFF")
-        self.cursor.execute("PRAGMA journal_mode = OFF")
-        self.cursor.execute("PRAGMA temp_store = MEMORY")
-        self.cursor.execute("PRAGMA locking_mode = EXCLUSIVE")
-        self.cursor.execute("PRAGMA count_changes = OFF")
-        self.cursor.execute("PRAGMA cache_spill = OFF")
-        #self.cursor.execute("PRAGMA journal_mode=WAL;")
+    # RamDB.py
+
+    def __init__(self, path=None):
         self.tables = {}  # To track schemas for validation
+
+        if path is None:
+            db_path = ':memory:'
+            self.is_memory = True
+        else:
+            path = Path(path).resolve()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            db_path = str(path)
+            self.is_memory = False
+
+        self.conn = sqlite3.connect(db_path, isolation_level=None)
+        self.cursor = self.conn.cursor()
+
+        # Common PRAGMAs
+        self.cursor.execute("PRAGMA page_size = 16384")
+        self.cursor.execute("PRAGMA cache_size = -20000")
+        self.cursor.execute("PRAGMA temp_store = MEMORY")
+        #self.cursor.execute("PRAGMA locking_mode = EXCLUSIVE")
+        self.cursor.execute("PRAGMA count_changes = OFF")
+
+        if self.is_memory:
+            # Aggressive settings - fine for RAM (no crash risk)
+            self.cursor.execute("PRAGMA synchronous = OFF")
+            self.cursor.execute("PRAGMA journal_mode = OFF")
+            self.cursor.execute("PRAGMA cache_spill = OFF")
+        else:
+            # Safer for disk - won't corrupt on crash
+            self.cursor.execute("PRAGMA synchronous = NORMAL")
+            self.cursor.execute("PRAGMA journal_mode = WAL")
+
 
     def _infer_schema(self, obj, exclude_keys=None):
         """
@@ -47,25 +68,12 @@ class RamDB:
                 continue  # Skip methods
 
             # Handle various data types
-            if isinstance(attr_value, bool):
-                schema[attr_name] = "INTEGER"  # Map bool to INTEGER
-            elif isinstance(attr_value, (np.bool_,)):  # Handle numpy booleans
-                schema[attr_name] = "INTEGER"
-            elif isinstance(attr_value, (int, np.integer)):  # Include numpy integers
-                schema[attr_name] = "INTEGER"
-            elif isinstance(attr_value, float):
-                schema[attr_name] = "REAL"
-            elif isinstance(attr_value, (np.float32, np.float64)):  # Handle numpy floats
-                schema[attr_name] = "REAL"
-            elif isinstance(attr_value, str):
-                schema[attr_name] = "TEXT"
-            elif isinstance(attr_value, (list, dict)):
-                schema[attr_name] = "TEXT"  # Serialize as JSON
-            elif isinstance(attr_value, np.ndarray):  # Handle numpy arrays
-                schema[attr_name] = "TEXT"  # Serialize as JSON
-            else:
-                raise TypeError(f"Unsupported field type: {type(attr_value)} for attribute '{attr_name}'")
+            if isinstance(attr_value, bool):            schema[attr_name] = "INTEGER"  # Map bool to INTEGER
+            elif isinstance(attr_value, float):         schema[attr_name] = "REAL"
+            elif isinstance(attr_value, str):           schema[attr_name] = "TEXT"
+            elif isinstance(attr_value, (list, dict)):  schema[attr_name] = "TEXT"  # Serialize as JSON
 
+            else:                                       raise TypeError(f"Unsupported field type: {type(attr_value)} for attribute '{attr_name}'")
         return schema
 
     def _create_table(self, table_name, schema): #I think this is being ignored due to another version lower
@@ -87,65 +95,6 @@ class RamDB:
         self.cursor.execute(sql)
         self.tables[table_name] = schema  # Track schema
 
-    def addorig(self, obj, exclude_keys=None, **context):
-        """
-        Add an object to the database with any number of context fields.
-        Automatically creates the table if it does not exist.
-        """
-        # Determine the table name from the object's class
-        table_name = obj.__class__.__name__
-
-        # Check if the table exists, and create it if necessary
-        if table_name not in self.tables:
-            self.create_table(table_name, obj, context, exclude_keys)
-
-        # Merge context fields and properties of the object
-        if exclude_keys is None:
-            data = {**context, **vars(obj)}                 # Context fields first
-        else:
-            data =  {
-                        key: value for key, value in {**context, **vars(obj)}.items()
-                        if key not in exclude_keys  # ✅ Exclude specified keys
-                    }
-
-        computed_fields = {                             # Dynamically add computed properties
-            attr: getattr(obj, attr)
-            for attr in dir(obj)
-            if isinstance(getattr(type(obj), attr, None), property)
-        }
-        data.update(computed_fields)
-
-        for key, value in data.items():
-            if isinstance(value, (bool, np.bool_)):  # Convert booleans to integers
-                data[key] = int(value)
-
-
-        for key, value in data.items():
-            if isinstance(value, np.ndarray):               # Serialize fields (e.g., numpy arrays, lists) into JSON-friendly formats
-                data[key] = json.dumps(value.tolist())
-            elif isinstance(value, (list, dict)):
-                data[key] = json.dumps(value)
-
-        # Convert numpy types to Python native types
-        for key, value in data.items():
-            if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
-                data[key] = int(value)  # Convert numpy integers to Python int
-            elif isinstance(value, (np.float64, np.float32, np.float16)):
-                data[key] = float(value)  # Convert numpy floats to Python float
-
-        # Debugging: Print the final data being inserted
-        #print("Prepared data for insertion:", data)
-
-        # Prepare SQL INSERT statement
-        columns = ", ".join(data.keys())
-        placeholders = ", ".join(["?"] * len(data))
-        sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders});"
-
-        # Debugging: Print the SQL statement
-        #print("Executing SQL:", sql)
-
-        # Execute the insert
-        self.cursor.execute(sql, tuple(data.values()))
 
     def add(self, obj, exclude_keys=None, **context):
         """
@@ -179,20 +128,8 @@ class RamDB:
         data.update(computed_fields)
 
         for key, value in data.items():
-            if isinstance(value, (bool, np.bool_)):
-                data[key] = int(value)
-
-        for key, value in data.items():
-            if isinstance(value, np.ndarray):
-                data[key] = json.dumps(value.tolist())
-            elif isinstance(value, (list, dict)):
+            if isinstance(value, (list, dict)):
                 data[key] = json.dumps(value)
-
-        for key, value in data.items():
-            if isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
-                data[key] = int(value)
-            elif isinstance(value, (np.float64, np.float32, np.float16)):
-                data[key] = float(value)
 
         columns     = ", ".join(data.keys())
         placeholders = ", ".join(["?"] * len(data))
@@ -383,36 +320,13 @@ class RamDB:
 
         else:
             #from tabulate import tabulate
-            #report = tabulate(data, headers="keys" if as_dict else [], tablefmt="fancy_grid")
+            report = "temp" #tabulate(data, headers="keys" if as_dict else [], tablefmt="fancy_grid")
             if print_source:
                 print(f"PRINTING FROM RamDB query_print: {self.get_call_stack_line()}")
             print(report)
 
         return data
 
-
-    def list_tablesCRAP(self, detail_level=2):
-        """
-        :param detail_level - 1 just tables.  2 tables and fields, 3 include data type
-        List all tables in the database.
-        If details=True, print the schema for each table including column data types.
-        """
-        if not (detail_level==1 or detail_level==2 or detail_level==3):
-            raise RuntimeError(f"Invalid value for detail_level(use 1,2, or 3)  not ==> {detail_level}")
-        if not self.tables:
-            print("No tables found.")
-            return
-
-        if detail_level==3:
-            for table_name, schema in self.tables.items():
-                print(f"\nTable: {table_name}")
-                # Create a list of dictionaries for tabulation
-                detailed_schema = [{"Column": col, "Type": col_type} for col, col_type in schema.items()]
-                print("fixme") # tabulate(detailed_schema, headers="keys", tablefmt="fancy_grid"))
-        if detail_level==2:
-            print("fixme") # tabulate(self.tables, headers="keys", tablefmt="fancy_grid"))
-        if detail_level==1:
-            print("fixme") # tabulate([{"Table Name": table_name} for table_name in self.tables.keys()], headers="keys", tablefmt="fancy_grid"))
 
 
     def list_tables(self, detail_level=2):
@@ -448,63 +362,6 @@ class RamDB:
                 schema = [{"Column": row[1], "Type": row[2]} for row in cursor.fetchall()]
                 print(f"\nTable: {name}")
                 print("fixme") # tabulate(schema, headers="keys", tablefmt="fancy_grid"))
-
-
-
-    def reconstruct_objects(self, table_name, cls, where_clause=""):
-        """
-        Reconstructs objects from the database based on a WHERE clause.
-
-        Args:
-            table_name (str): The name of the table (usually class name).
-            cls (type): The class to instantiate objects.
-            where_clause (str, optional): A SQL WHERE clause (e.g., "epoch=2 AND iteration=10").
-
-        Returns:
-            List of instantiated objects.
-        """
-        # Build the SQL query
-        sql = f"SELECT * FROM {table_name}"
-        if where_clause:
-            sql += f" WHERE {where_clause}"
-
-        # Query the database
-        records = self.query(sql, as_dict=True)
-
-        # Handle missing records
-        if not records:
-            print(f"No records found for {table_name} with condition: {where_clause}")
-            return []
-
-        # Get the class constructor arguments dynamically
-        init_params = cls.__init__.__code__.co_varnames[1:]  # Exclude 'self'
-
-        # Reconstruct objects
-        objects = []
-        for record in records:
-            # Convert JSON fields back to objects
-            for key, value in record.items():
-                if isinstance(value, str):  # Deserialize JSON-like fields
-                    try:
-                        record[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        pass  # Not a JSON-encoded string
-
-            # Handle special cases (e.g., delegate functions)
-            if cls.__name__ == "Neuron" and "activation" in record:
-                activation_name = record["activation"]
-                record["activation"] = ActivationFunction.get_by_name(activation_name)
-
-            # Extract only the parameters that match the class constructor
-            filtered_params = {k: v for k, v in record.items() if k in init_params}
-
-            # Instantiate the object
-            obj = cls(**filtered_params)
-            objects.append(obj)
-
-        return objects
-
-
 
     def get_call_stack_line(self):
         """

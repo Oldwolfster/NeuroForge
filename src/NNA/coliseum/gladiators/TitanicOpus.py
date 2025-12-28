@@ -3,7 +3,7 @@ from src.NNA.engine.BaseGladiator import Gladiator
 from src.NNA.Legos.WeightInitializers import *
 from src.NNA.Legos.LossFunctions import *
 from src.NNA.Legos.Scalers import *
-from src.NNA.Legos.Optimizers import *
+from src.NNA.Legos.Optimizer import *
 from src.NNA.engine.Config import Config
 from src.NNA.engine.Neuron import Neuron
 from src.NNA.engine.convergence.ConvergenceDetector import ROI_Mode

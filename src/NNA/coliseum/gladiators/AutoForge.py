@@ -1,12 +1,12 @@
 import math
 from typing import Tuple
 
-from src.NNA.Legos.ActivationFunctions import *
+from src.NNA.Legos.Activation import *
 from src.NNA.engine.BaseGladiator import Gladiator
-from src.NNA.Legos.WeightInitializers import *
-from src.NNA.Legos.LossFunctions import *
-from src.NNA.Legos.Scalers import *
-from src.NNA.Legos.Optimizers import *
+from src.NNA.Legos.Initializer import *
+from src.NNA.Legos.Loss import *
+from src.NNA.Legos.Scaler import *
+from src.NNA.Legos.Optimizer import *
 from src.NNA.engine.Config import Config
 from src.NNA.engine.Neuron import Neuron
 from src.NNA.engine.convergence.ConvergenceDetector import ROI_Mode
@@ -25,7 +25,7 @@ class AutoForge_TEMPLATE(Gladiator):
 
         config.architecture            = [1]
         config.optimizer                = Optimizer_SGD
-        #config.learning_rate           = 0.5
+        config.learning_rate           = 0.5
         #config.weight_initializer      = Initializer_He
         #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_NoDamnFunction

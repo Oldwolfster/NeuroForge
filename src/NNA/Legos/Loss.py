@@ -1,6 +1,8 @@
-from src.NNA.Legos.ActivationFunctions import *
-from src.NNA.engine.Neuron   import Neuron
+#from src.NNA.engine.Neuron   import Neuron
 import math
+
+from src.NNA.Legos.Activation import *
+
 
 def _get_n(y_true):
     """
@@ -354,24 +356,6 @@ Loss_Huber = StrategyLossFunction(
 )
 
 
-def DELETE_ME___________half_wit_lossImproved( y_pred, y_true):
-    """
-    Half Wit Loss: returns 0.5 * Σ(p − t)^2 (no averaging).
-
-Why this form:
-- Matches the intended update signal exactly: dL/dp = (p − t).
-- Loss value scales with batch size (by design). Use MAE/MSE for cross-run loss comparisons.
-
-Use when:
-- You want the simple raw-error gradient.
-- You’re okay with the loss magnitude depending on batch length.
-
-If you need MSE semantics instead:
-- Use L = (1/n) * Σ(p − t)^2 and dL/dp = (2/n) * (p − t).
-    """
-    n = _get_n(y_true)
-    diffs = [(p - t) ** 2 for p, t in zip(y_pred, y_true)] if n > 1 else [(y_pred - y_true) ** 2]
-    return 0.5 * sum(diffs)  # matches derivative = (p - t)
 
 
     # 🔹 Weighted Binary Cross-Entropy (with logits)
