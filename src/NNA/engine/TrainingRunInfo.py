@@ -4,6 +4,7 @@ from src.ArenaSettings import HyperParameters
 from src.NNA.engine import RamDB
 from datetime import datetime
 
+from src.NNA.engine.Config import Config
 from src.NNA.engine.TrainingData import TrainingData
 
 
@@ -18,11 +19,11 @@ class TrainingRunInfo:
         self.record_level:      RecordLevel         = record_level
         self.db:                 RamDB              = hyper.db_ram
         self.training_data:      TrainingData       = training_data
-        #TEMPORARILY REMOVED FOR TESTING self.config:             Config             = Config(self ,  db=self.db, training_data=self.training_data, )
+        self.config:             Config             = Config(self)
         self.setup                                  = setup                 #the string written to db with purpose of rerunning exactly at a later date
         self.time_start:        datetime            = datetime.now()
         self.time_end:          datetime            = None
-        print (f"training data: {self.training_data.raw_data}")
+
 
     def record_finish_time(self):
         self.time_end = datetime.now()

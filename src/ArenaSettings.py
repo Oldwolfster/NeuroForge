@@ -47,12 +47,12 @@ class HyperParameters():
         #ARCH_WILDCARD_MAX_NEURONS = 16  # Maximum neurons per layer
         #ARCH_WILDCARD_MIN_NEURONS = 1   # Minimum neurons per layer
 
-        self.db_ram = RamDB()
-        self.db_dsk = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
+        self.db_ram: RamDB = RamDB()
+        self.db_dsk: RamDB = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
 
 
         self.arenas = ['RepaymentFromCreditScore']
-        self.gladiators=['AutoForge','TitanicOpus']
+        self.gladiators=['AutoForge'] #,'TitanicOpus']
 
 
 

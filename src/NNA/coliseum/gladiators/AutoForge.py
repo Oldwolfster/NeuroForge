@@ -9,7 +9,7 @@ from src.NNA.Legos.Scaler import *
 from src.NNA.Legos.Optimizer import *
 from src.NNA.engine.Config import Config
 from src.NNA.engine.Neuron import Neuron
-from src.NNA.engine.convergence.ConvergenceDetector import ROI_Mode
+
 
 class AutoForge_TEMPLATE(Gladiator):
     """ AutoForge -  A ⚡imple Yet Powerful Neural Network ⚡
@@ -83,7 +83,7 @@ class AutoForge_TEMPLATE(Gladiator):
     # 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹  Idiot proof features  🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹
     # 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹  THE KEY 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹
     # 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹
-ez_debug()
+
 """
 1) Self setting LR
 2) No exploding gradient
