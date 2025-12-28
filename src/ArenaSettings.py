@@ -11,8 +11,8 @@ class HyperParameters():
         ############################################################
 
         self.epochs_to_run           : int   = 30     # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 2        # Qty of training data
-        self.random_seed             : int   = 0    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
+        self.training_set_size       : int   = 4        # Qty of training data
+        self.random_seed             : int   = 181467    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
         self.seed_replicates         : int   = 3         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
         self.display_train_data      : bool  = True      # Display the training data at the end of the rn.
@@ -29,8 +29,8 @@ class HyperParameters():
             # "initializer": "*",
             # "architecture": [[4, 4, 1], [2, 2, 1]],
             #"seed":[1,2,3],
-            "loss":  Loss_HalfWit,
-            "optimizer": [Optimizer_SGD, Optimizer_Adam],
+            #"loss":  Loss_HalfWit,
+            #"optimizer": [Optimizer_SGD, Optimizer_Adam],
             # "batch_size": [1, 2, 4, 8, 999]
         }
 
@@ -51,7 +51,8 @@ class HyperParameters():
         self.db_dsk: RamDB = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
 
 
-        self.arenas = ['RepaymentFromCreditScore']
+        #self.arenas = ['RepaymentFromCreditScore']
+        self.arenas = ['CarValueFromMiles']
         self.gladiators=['AutoForge'] #,'TitanicOpus']
 
 
@@ -59,7 +60,7 @@ class HyperParameters():
     """
     GOAL OF REFACTORS
 1) Treat bias like a weight in NNA
-2) Test set separate from training
+
 3) Binary Classification logic.
   - Detects: target has exactly 2 distinct values
   - Stores: label_low, label_high (unscaled)
@@ -79,6 +80,11 @@ class HyperParameters():
 - RunRecord
 10) Leverge RamDB for all sql.(eliminate all or nearly all sql)
 11) Boycot the ridiculous underscore prefix pretending to be a scope modifier... give us option explicit and don't use it if you are stupid.
+
+*** Punting for now - revise after clean refactor.
+# reorder sample
+# training/test data
+
 """
 
 """

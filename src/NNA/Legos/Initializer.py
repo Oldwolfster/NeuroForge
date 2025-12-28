@@ -1,7 +1,7 @@
 import random
 import math
 
-class Initializer:
+class Initializer: #TODO rename StrategyInitializer
     """Encapsulates weight initialization strategies with proper bias handling."""
 
     def __init__(self, method, bias_method=None, name="Custom", desc="", when_to_use="", best_for=""):

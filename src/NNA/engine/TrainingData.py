@@ -27,22 +27,15 @@ class TrainingData:
             ValueError: If any numeric values are invalid (NaN or infinite)
         """
         self.arena_name          = "Unknown"
-        #self.raw_data            = [tuple(r) for r in raw_data]
         self._raw_data           = None    # initialize private backing field
         self.raw_data            = raw_data  # use setter (it will freeze the input)
         self._fingerprint        = [row[-1] for row in self.raw_data[:10]]
 
         self._cache              = {}                    # Private dictionary for caching values
         self.feature_labels      = feature_labels        # Optional feature labels
+        self.target_labels       = target_labels or ["Beta", "Alpha"]         # Optional outcome labels
+        self.is_binary_decision  = self.determine_problem_type()
 
-        if not target_labels:
-            target_labels        = ["Beta", "Alpha"]
-        self.target_labels       = target_labels         # Optional outcome labels
-
-        self.problem_type        = self.determine_problem_type()
-        self.is_binary_decision  = False
-        if self.problem_type == "Binary Decision":
-            self.is_binary_decision = True
 
     @property
     def raw_data(self):
@@ -71,17 +64,15 @@ class TrainingData:
     def get_targets(self):
         return [sample[-1] for sample in self.raw_data]
 
-    def determine_problem_type(self) -> str:
-        """
-        Examine training data to determine if it's binary decision or regression
-        """
-        unique_values = set(item[-1] for item in self.raw_data)
-        if len(unique_values) == 2:
-            return "Binary Decision"
-        elif len(unique_values) > 2:
-            return "Regression"
-        else:
-            return "Inconclusive"
+    def determine_problem_type(self) -> bool:
+        """Examine training data to determine if it's binary decision or regression"""
+        unique_values = set(item[-1]    for item in self.raw_data)
+        return len(unique_values)  == 2
+
+    @property
+    def problem_type(self) -> str:
+        if self.is_binary_decision:     return "Binary Decision"
+        return "Regression"
 
     @property
     def input_max(self) -> float:

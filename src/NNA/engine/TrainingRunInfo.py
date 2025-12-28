@@ -17,10 +17,10 @@ class RecordLevel(Enum):
 class TrainingRunInfo:
     def __init__(self, hyper: HyperParameters, training_data: TrainingData, setup: dict, record_level: RecordLevel):
         self.record_level:      RecordLevel         = record_level
-        self.db:                 RamDB              = hyper.db_ram
-        self.training_data:      TrainingData       = training_data
-        self.config:             Config             = Config(self)
-        self.setup                                  = setup                 #the string written to db with purpose of rerunning exactly at a later date
+        self.db:                RamDB               = hyper.db_ram
+        self.training_data:     TrainingData        = training_data
+        self.config:            Config              = Config(self)
+        self.setup:             dict                = setup                 #the string written to db with purpose of rerunning exactly at a later date
         self.time_start:        datetime            = datetime.now()
         self.time_end:          datetime            = None
 

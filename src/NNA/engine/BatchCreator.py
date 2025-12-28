@@ -1,6 +1,6 @@
 from src.ArenaSettings import HyperParameters
 import random
-from src.NNA.Legos._LegoLoader import LegoLoader
+from src.NNA.Legos._LegoWildCard import LegoLoader
 from pathlib import Path
 from itertools import product
 

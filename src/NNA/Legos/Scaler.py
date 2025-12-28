@@ -94,7 +94,7 @@ class MultiScaler:
         return f"MultiScaler({[s.name for s in self.scalers]})"
 
 
-class Scaler:
+class Scaler:#TODO rename StrategyScaler
     def __init__(self, method, name="Scaler", desc="", when_to_use="", best_for=""):
         self.method = method
         self.name = name

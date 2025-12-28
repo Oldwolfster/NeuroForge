@@ -1,6 +1,6 @@
 import math
 
-class StrategyActivationFunction:
+class StrategyActivation:
     """Encapsulates an activation function and its derivative."""
     def __init__(self, function, derivative, bd_defaults, name="Custom"):
         self.function = function
@@ -22,7 +22,7 @@ class StrategyActivationFunction:
 
 
 # Standard activations as objects
-Activation_NoDamnFunction = StrategyActivationFunction(
+Activation_NoDamnFunction = StrategyActivation(
     function=lambda x: x,
     derivative=lambda x: 1,
     bd_defaults=[-1, 1, 0],
@@ -39,7 +39,7 @@ def sigmoid_stable(x):
         exp_x = math.exp(x)
         return exp_x / (1 + exp_x)
 
-Activation_Sigmoid = StrategyActivationFunction(
+Activation_Sigmoid = StrategyActivation(
     #function=lambda x: 1 / (1 + math.exp(-x)),
     function=sigmoid_stable,
     derivative=lambda x: x * (1 - x),  # More efficient if x = sigmoid(x)
@@ -47,28 +47,28 @@ Activation_Sigmoid = StrategyActivationFunction(
     name="Sigmoid"
 )
 
-Activation_Tanh         = StrategyActivationFunction(
+Activation_Tanh         = StrategyActivation(
     function            = math.tanh,
     derivative          = lambda x: 1 - x**2,  # x is already tanh(raw_sum)
     bd_defaults         = [-1, 1, 0],
     name                = "Tanh"
 )
 
-Activation_ReLU         = StrategyActivationFunction(
+Activation_ReLU         = StrategyActivation(
     function            = lambda x: x if x > 0 else 0,
     derivative          = lambda x: 1 if x > 0 else 0,
     bd_defaults         = [0, 1, 0.5],
     name                = "ReLU"
 )
 
-Activation_LeakyReLU    = StrategyActivationFunction(
+Activation_LeakyReLU    = StrategyActivation(
     function            = lambda x: x if x > 0 else 0.01 * x,
     derivative          = lambda x: 1 if x > 0 else 0.01,
     bd_defaults         = [0, 1, 0.5],
     name                = "Leaky"
 )
 
-Activation_TinyReLU     = StrategyActivationFunction(
+Activation_TinyReLU     = StrategyActivation(
     function            = lambda x: x if x > 0 else 0.66 * x,
     derivative          = lambda x: 1 if x > 0 else 0.001,
     bd_defaults         = [0, 1, 0.5],
