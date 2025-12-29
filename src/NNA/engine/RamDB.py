@@ -69,10 +69,10 @@ class RamDB:
 
             # Handle various data types
             if isinstance(attr_value, bool):            schema[attr_name] = "INTEGER"  # Map bool to INTEGER
+            elif isinstance(attr_value, int):           schema[attr_name] = "INTEGER"
             elif isinstance(attr_value, float):         schema[attr_name] = "REAL"
             elif isinstance(attr_value, str):           schema[attr_name] = "TEXT"
             elif isinstance(attr_value, (list, dict)):  schema[attr_name] = "TEXT"  # Serialize as JSON
-
             else:                                       raise TypeError(f"Unsupported field type: {type(attr_value)} for attribute '{attr_name}'")
         return schema
 

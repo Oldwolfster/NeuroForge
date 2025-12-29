@@ -51,7 +51,7 @@ class HyperParameters():
         self.db_dsk: RamDB = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
 
 
-        #self.arenas = ['RepaymentFromCreditScore']
+        self.arenas = ['RepaymentFromCreditScore']
         self.arenas = ['CarValueFromMiles']
         self.gladiators=['AutoForge'] #,'TitanicOpus']
 
@@ -81,9 +81,11 @@ class HyperParameters():
 10) Leverge RamDB for all sql.(eliminate all or nearly all sql)
 11) Boycot the ridiculous underscore prefix pretending to be a scope modifier... give us option explicit and don't use it if you are stupid.
 
-*** Punting for now - revise after clean refactor.
+*** Hills i won't die on.  Punting for now - revise after clean refactor.
 # reorder sample
 # training/test data
+# Using LAG instead of storing every weight before and after.
+# Remove squared_error from iteration.
 
 """
 

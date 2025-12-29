@@ -11,15 +11,17 @@ import gc
 
 class NeuroEngine:   # Note: one different standard than PEP8... we align code vertically for better readability and asthetics
     def __init__(self, hyper):
-        self.hyper                  = hyper
-        self.training_data          = None
+        self.hyper                          = hyper
+        self.training_data                  = None
+        self.hyper.db_ram                   = prep_RamDB()
+        self.TRIs: list[TrainingRunInfo]    = []
         self.run_a_batch()
+        if self.TRIs:                       self.TRIs[0].db.copy_tables_to_permanent()
+        if self.TRIs:                       NeuroForge(self.TRIs)
 
     def run_a_batch(self):
         if self.hyper.resume_batch:     raise RuntimeError(f"Resume not yet implemented")
         else:                           batch_id = BatchCreator(self.hyper).create_a_batch()
-
-        TRIs: list[TrainingRunInfo]     = []
         batch                           = BatchRunner(batch_id=batch_id, db_dsk=self.hyper.db_dsk)
         for setup in batch:
             print(f"\n💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪💪")
@@ -32,7 +34,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
 
             record_level = RecordLevel.FULL if batch.current_run <= self.hyper.nf_count else RecordLevel.SUMMARY
             TRI_latest = self.atomic_train_a_model(setup, record_level, self.hyper, batch, epochs=0) #epochs 0 is how it differentiates the 'real' run from a LR sweep
-            if record_level == RecordLevel.FULL: TRIs.append(TRI_latest)
+            if record_level == RecordLevel.FULL: self.TRIs.append(TRI_latest)
 
     def atomic_train_a_model(self,setup:dict,record_level, hyper:HyperParameters, batch: BatchRunner, epochs):  # ATAM is short for  -->atomic_train_a_model
         seed_to_use = setup.get("seed") # guranteed to have seed
@@ -40,19 +42,22 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
         training_data = instantiate_arena(setup["arena"], hyper.training_set_size)  # Passed to base_gladiator through TRI
         set_seed(seed_to_use)  # Reset seed as it likely was used in training_data
         create_weight_tables(hyper.db_ram, batch.current_run)
-        TRI = TrainingRunInfo(hyper, training_data, setup, record_level)
+        TRI = TrainingRunInfo(hyper, training_data, setup, record_level,batch.current_run)
 
         # Below temporarily removed to test training data generation.
         NN = dynamic_instantiate(setup["gladiator"], 1, "coliseum/gladiators", TRI)
-        #NN.train(epochs)  # Actually train model
+        NN.train(epochs)  # Actually train model
+
         #record_results(TRI, batch_id, run_id)  # Store Config for this model #TODO make use of RecordLevel
-        #return TRI
+        return TRI
 
     def learning_rate_sweep(self, setup):
         pass
 
     def check_for_clear(self, batch):
+        """This makes batch runs go in near linear time"""
         if batch.current_run % 10 == 0: #and batch.id_of_current > self.shared_hyper.nf_count:
+
             # Periodic RamDB reset for SUMMARY runs
             self.hyper.db_ram = prep_RamDB()
             print(f"🧹 Reset RamDB at run {batch.current_run}")

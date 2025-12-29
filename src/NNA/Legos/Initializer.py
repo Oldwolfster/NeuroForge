@@ -12,11 +12,11 @@ class Initializer: #TODO rename StrategyInitializer
         self.when_to_use = when_to_use
         self.best_for = best_for  # Best activation functions
 
-    def __call__(self, shape):
+    def __call__(self, num_inputs):
         """Generates initialized weights & bias given a shape."""
-        weights = self.method(shape)  # Generate weights
+        weights = self.method(num_inputs)  # Generate weights
         bias = self.bias_method()     # Generate bias using the selected method
-        return weights, bias
+        return  [bias] + weights
 
     def __repr__(self):
         """Custom representation for debugging."""

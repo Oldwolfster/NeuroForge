@@ -411,65 +411,50 @@ Scaler_MaxAbs = Scaler(
     best_for="Linear models or cases where sign preservation is important."
 )
 
+
+# Scalers.py
+
 class RobustScalerMethod:
 
-    def _sanitize_iqr(self, iqr, values=None):
-        """
-        Ensure that no dimension of `iqr` is zero.
-        If IQR is 0 but data has variation, use standard deviation instead.
-        """
-        import numpy as np
-
-        if np.isscalar(iqr):
-            if iqr == 0 and values is not None:
-                # Check if data actually has variation
-                std_val = np.std(values)
-                return std_val if std_val > 0 else 1.0
-            return 1.0 if iqr == 0 else iqr
-        else:
-            iqr = np.array(iqr)
-            if values is not None:
-                std_vals = np.std(values, axis=0)
-                for i in range(len(iqr)):
-                    if iqr[i] == 0 and std_vals[i] > 0:
-                        iqr[i] = std_vals[i]
-            iqr[iqr == 0] = 1.0
-            return iqr
-
-    def _sanitize_iqrOld(self, iqr):
-        """
-        Ensure that no dimension of `iqr` is zero.
-        Works whether `iqr` is a scalar or an array.
-        """
-        import numpy as np
-
-        if np.isscalar(iqr):
-            return 1.0 if iqr == 0 else iqr
-        else:
-            # make sure it’s an array
-            iqr = np.array(iqr)
-            iqr[iqr == 0] = 1.0
-            return iqr
-
     def scale(self, params, values):
-        import numpy as np
-        arr = np.array(values)
+        sorted_vals = sorted(values)
+        n = len(sorted_vals)
 
-        # Compute median and (raw) IQR
-        params['median'] = np.median(arr, axis=0)
-        raw_iqr         = np.percentile(arr, 75, axis=0) - np.percentile(arr, 25, axis=0)
+        # Median
+        if n % 2 == 1:
+            params['median'] = sorted_vals[n // 2]
+        else:
+            params['median'] = (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
 
-        # Sanitize: avoid division by zero
-        params['iqr'] = self._sanitize_iqr(raw_iqr)
+        # IQR
+        q25 = self.percentile(sorted_vals, 25)
+        q75 = self.percentile(sorted_vals, 75)
+        raw_iqr = q75 - q25
 
-        # Do the scaling
-        return ((arr - params['median']) / params['iqr']).tolist()
+        params['iqr'] = self.sanitize_iqr(raw_iqr, values)
+
+        return [(v - params['median']) / params['iqr'] for v in values]
 
     def unscale(self, params, x):
-        import numpy as np
-        x = np.array(x)
-        return (x * params['iqr'] + params['median']).tolist()
+        if isinstance(x, list):
+            return [v * params['iqr'] + params['median'] for v in x]
+        return x * params['iqr'] + params['median']
 
+    def percentile(self, sorted_vals, p):
+        n = len(sorted_vals)
+        k = (n - 1) * p / 100
+        f = int(k)
+        c = f + 1 if f + 1 < n else f
+        return sorted_vals[f] + (k - f) * (sorted_vals[c] - sorted_vals[f])
+
+    def sanitize_iqr(self, iqr, values):
+        if iqr == 0:
+            # Fallback to std dev if IQR is zero but data varies
+            mean = sum(values) / len(values)
+            variance = sum((v - mean) ** 2 for v in values) / len(values)
+            std = variance ** 0.5
+            return std if std > 0 else 1.0
+        return iqr
 
 Scaler_Robust = Scaler(
     method=RobustScalerMethod(),
@@ -480,17 +465,20 @@ Scaler_Robust = Scaler(
 )
 
 
+
+
 class LogScalerMethod:
     def scale(self, params, values):
-        import numpy as np
-        arr = np.array(values)
-        params['offset'] = np.abs(np.min(arr)) + 1 if np.min(arr) <= 0 else 0
-        return np.log(arr + params['offset']).tolist()
+        import math
+        min_val = min(values)
+        params['offset'] = abs(min_val) + 1 if min_val <= 0 else 0
+        return [math.log(v + params['offset']) for v in values]
 
     def unscale(self, params, x):
-        import numpy as np
-        return (np.exp(x) - params['offset']).tolist()
-
+        import math
+        if isinstance(x, list):
+            return [math.exp(v) - params['offset'] for v in x]
+        return math.exp(x) - params['offset']
 
 Scaler_Log = Scaler(
     method=LogScalerMethod(),
