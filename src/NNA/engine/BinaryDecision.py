@@ -16,8 +16,8 @@ class BinaryDecision:
         if prediction_unscaled >= self.threshold:   return self.target_max, self.label_max
         return self.target_min, self.label_min
 
-    #TODO leverage the below.
-    def is_correct(self, prediction_unscaled, target_unscaled) -> bool:
+
+    def is_true(self, prediction_unscaled, target_unscaled) -> bool:
         """Single source of truth for correctness check."""
         if not self.is_active:
             return None  # Or raise - shouldn't be called for regression

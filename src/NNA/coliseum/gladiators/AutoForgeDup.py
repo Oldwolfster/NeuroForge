@@ -23,9 +23,10 @@ class AutoForge_TEMPLATE(Gladiator):
         """ 👉  Anything prior to initializing neurons goes here
             💪  For example setting config options.        """
 
-        config.architecture            = [3,2,1]
+
         config.optimizer                = Optimizer_SGD
         config.learning_rate           = 0.1
+        config.architecture            = [2,1]
         config.weight_initializer      = Initializer_He
         #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_NoDamnFunction

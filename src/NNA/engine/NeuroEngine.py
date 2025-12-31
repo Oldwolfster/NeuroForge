@@ -9,6 +9,9 @@ from src.NNA.utils.dynamic_instantiate import instantiate_arena, dynamic_instant
 #import psutil
 import gc
 
+from src.NeuroForge.NeuroForge import NeuroForge
+
+
 class NeuroEngine:   # Note: one different standard than PEP8... we align code vertically for better readability and asthetics
     def __init__(self, hyper):
         self.hyper                          = hyper

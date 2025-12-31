@@ -23,7 +23,7 @@ def ez_debug(**kwargs):
 def should_print_epoch(epoch: int, exp: int) -> bool:
     if exp>0:                   return False
     if epoch == 0:              return False            # preserve old "epoch != 0" behavior
-    if epoch <= 50:             return True             # always print 1–10
+    if epoch <= 2:             return True             # always print 1–10
     if epoch <= 100:            return epoch % 10 == 0  # 20, 30, 40, ... 100
     return epoch % 100 == 0                             # back to "normal" over 100
 

@@ -4,6 +4,7 @@ from src.ArenaSettings import HyperParameters
 from src.NNA.engine import RamDB
 from datetime import datetime
 
+from src.NNA.engine.BinaryDecision import BinaryDecision
 from src.NNA.engine.Config import Config
 from src.NNA.engine.TrainingData import TrainingData
 
@@ -21,6 +22,7 @@ class TrainingRunInfo:
         self.training_data:     TrainingData        = training_data
         self.hyper:             HyperParameters     = hyper
         self.config:            Config              = Config(self)
+        self.BD:                BinaryDecision      = BinaryDecision(training_data)
         self.setup:             dict                = setup                 #the string written to db with purpose of rerunning exactly at a later date
         self.gladiator:         str                 = setup["gladiator"]
         self.run_id:            int                 = run_id
@@ -28,7 +30,7 @@ class TrainingRunInfo:
         self.time_end:          datetime            = None
 
         self.converge_cond:     str                 = None
-
+        self.bd_correct:        int                 = 0
         self.mae:               float               = None
         self.lowest_mae:        float               = 6.9e69
         self.lowest_mae_epoch:  int                 = 0

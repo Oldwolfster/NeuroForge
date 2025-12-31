@@ -4,9 +4,10 @@ from dataclasses import dataclass
 class RecordSample:
     run_id: int
     epoch: int
-    sample_num: int
+    sample: int
     inputs: str  # Serialized as JSON
     inputs_unscaled: str  # Serialized as JSON
+    is_true: int # from BinaryDecision class
     target: float
     target_unscaled: float
     prediction: float  # After threshold(step function) is applied but before unscaling is applied
@@ -43,18 +44,8 @@ class RecordSample:
     def relative_error(self) -> float:
         return abs(self.error / (self.target + 1e-64))
 
-    @property
-    def is_true(self) -> int:
-        # For Binary Decision: direct comparison (both should be exact integers)
-        # prediction = thresholded value (bd_target_alpha or bd_target_beta)
-        # target_unscaled = original target class value
-        if self.prediction == self.target_unscaled:
-            return True
 
-        # Fallback for regression: use relative error threshold
-        if self.target == 0:
-            return self.prediction == 0
-        return int(self.relative_error <= self.accuracy_threshold)
+
 
     @property
     def is_false(self) -> int:

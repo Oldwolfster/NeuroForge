@@ -195,10 +195,10 @@ class StrategyOptimizer:
                     self._backprop_popup_operators_batch,
                     self._backprop_popup_headers_finalizer,
                     self._backprop_popup_operators_finalizer)
-    def _intercept_update(self, neuron, input_vector, blame, t, config, epoch, sample_num, batch_id):
+    def _intercept_update(self, neuron, input_vector, blame, t, config, epoch, sample, batch_id):
         """Wrapper that adds context to universal update logs"""
         raw_logs = universal_batch_update(neuron, input_vector, blame, t, config)
-        ctx = [epoch, sample_num, neuron.nid, batch_id]
+        ctx = [epoch, sample, neuron.nid, batch_id]
 
         final_logs = []
         for row in raw_logs:

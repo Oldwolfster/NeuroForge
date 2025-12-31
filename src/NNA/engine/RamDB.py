@@ -223,15 +223,6 @@ class RamDB:
                 elapsed = time.perf_counter() - start
                 self._add_timing[table_name] = self._add_timing.get(table_name, 0.0) + elapsed
 
-    def executemanyorig(self, sql, data_list):
-        """
-        Execute a SQL command that takes multiple parameter sets.
-        """
-        try:
-            self.cursor.executemany(sql, data_list)
-        except sqlite3.Error as e:
-            raise RuntimeError(f"SQL execution failed: {e}")
-
     def executemany(self, sql, data_list, table_name=None):
         """
         Execute a SQL command that takes multiple parameter sets.
@@ -254,7 +245,6 @@ class RamDB:
                 elapsed = time.perf_counter() - start
                 self._add_timing[table_name] = self._add_timing.get(table_name, 0.0) + elapsed
 
-
     def query(self, sql, params=None, as_dict=True):
         try:
             self.cursor.execute(sql, params or ())
@@ -266,6 +256,12 @@ class RamDB:
         except sqlite3.Error as e:
             raise RuntimeError(f"SQL query failed: {e}\nquery = {sql}") from None #TODO this should put it one up th ecall stack..
 
+    def query_value(self, sql, params=None):
+        """Return single scalar value from query. Returns None if no results."""
+        rs = self.query(sql, params, as_dict=False)
+        if rs and rs[0]:
+            return rs[0][0]
+        return None
 
     def query_scalar_list(self, sql, params=None):
         """
@@ -326,8 +322,6 @@ class RamDB:
             print(report)
 
         return data
-
-
 
     def list_tables(self, detail_level=2):
         """

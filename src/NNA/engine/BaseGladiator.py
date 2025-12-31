@@ -17,7 +17,7 @@ from datetime                    import datetime
 from src.NNA.utils.snapshot_weights import snapshot_weights
 
 
-#from src.NNA.engine.Utils_DataClasses import sample_num
+#from src.NNA.engine.Utils_DataClasses import sample
 #from src.NNA.Legos.WeightInitializers import *
 
 
@@ -41,11 +41,11 @@ class Gladiator(ABC):
         self.config                 = TRI.config
         self.db                     = TRI.db
         self.training_data          = TRI.training_data         # Only needed for sqlMgr ==> self.ramDb = args[3]
-        self.BD                     = BinaryDecision(TRI.training_data)
+
         self.VCR                    = VCR(TRI)
         self.sample                 = 0
         self.epoch                  = 0
-        self.total_sample_nums       = 1                         # Timestep for optimizers such as adam
+        self.total_samples       = 1                         # Timestep for optimizers such as adam
         self.blame_calculations     = []
         self.weight_calculations    = []
         self.configure_everything()
@@ -55,6 +55,7 @@ class Gladiator(ABC):
 
     def configure_everything(self):
         self.configure_model(self.config)              # Typically overwritten in child (gladiator) class.
+        ez_debug(arch=self.config.architecture)
         self.config.autoML()
         self.initialize_neurons()
         self.customize_neurons(self.config)            # Typically overwritten in child  class.
@@ -110,7 +111,7 @@ class Gladiator(ABC):
         """
         self.epoch = epoch  # Set so the child model has access
 
-        for self.sample_num, (sample, sample_unscaled) in enumerate(
+        for self.sample, (sample, sample_unscaled) in enumerate(
             zip(self.config.scaler.scaled_samples, self.config.scaler.unscaled_samples)
         ):
             if (self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion" or
@@ -127,14 +128,17 @@ class Gladiator(ABC):
 
         prediction_raw                  = Neuron.output_neuron.activation_value
         prediction_unscaled             = self.config.scaler.unscale_target(prediction_raw)
-        prediction_thresh, label        = self.BD.decide(prediction_unscaled)
+        prediction_thresh, label        = self.TRI.BD.decide(prediction_unscaled)
+        is_true                         = self.TRI.BD.is_true(prediction_unscaled, sample_unscaled[-1])
+        #print(f"sample unscaled[:-1]{sample_unscaled[:-1]}")
 
         sample_results = RecordSample(
             run_id              = self.TRI.run_id,
             epoch               = self.epoch,
-            sample_num           = self.sample_num,
+            sample           = self.sample,
             inputs              = dumps(sample[:-1]),
             inputs_unscaled     = dumps(sample_unscaled[:-1]),
+            is_true             = is_true,
             target              = sample[-1],
             target_unscaled     = sample_unscaled[-1],
             prediction          = prediction_thresh,
@@ -146,7 +150,7 @@ class Gladiator(ABC):
             loss_gradient       = blame,
             accuracy_threshold  = 1e-10,
         )
-        self.VCR.record_sample_num(sample_results, Neuron.layers)
+        self.VCR.record_sample(sample_results, Neuron.layers)
 
 
     def optimize_passes(self, sample_scaled):
@@ -211,7 +215,7 @@ class Gladiator(ABC):
             error_from_next = next_neuron.error_signal
             total_backprop_error += weight_to_next * error_from_next
             self.blame_calculations.append([
-                self.epoch, self.sample_num, self.TRI.run_id,
+                self.epoch, self.sample, self.TRI.run_id,
                 neuron.nid, next_neuron.position,
                 weight_to_next, "*", error_from_next,
                 "=", None, None,
@@ -233,11 +237,11 @@ class Gladiator(ABC):
         input_vector = [1.0] + list(prev_layer_values)
         self.weight_calculations.extend(
             self.config.optimizer.update(
-                neuron, input_vector, blame, self.total_sample_nums,
+                neuron, input_vector, blame, self.total_samples,
                 config=self.config,
                 epoch=self.epoch,  # Already 1-indexed
-                sample_num=self.sample_num,  # Renamed from sample_num
+                sample=self.sample,  # Renamed from sample
                 batch_id=self.VCR.batch_id
             )
         )
-        self.total_sample_nums += len(input_vector)
+        self.total_samples += len(input_vector)

@@ -9,6 +9,7 @@ from .Neuron import Neuron
 from .RamDB import RamDB
 
 from src.ArenaSettings import HyperParameters
+from .RecordEpoch import RecordEpoch
 from .RecordSample import RecordSample
 from .TrainingData import TrainingData
 from .TrainingRunInfo import TrainingRunInfo, RecordLevel
@@ -26,9 +27,9 @@ class VCR:
         self.db  : RamDB            = TRI.db
         self.neurons                = Neuron.neurons
         self.batch_id               = 0
-        self.sample_num          = 0                         # Current sample_num #
+        self.sample          = 0                         # Current sample #
         self.epoch_curr_number      = 1                         # Which epoch are we currently on.
-        self.sample_count           = len(TRI.training_data.get_list())          # Calculate and store sample count= 0               # Number of samples in each sample_num.
+        self.sample_count           = len(TRI.training_data.get_list())          # Calculate and store sample count= 0               # Number of samples in each sample.
         #TODO self.converge_detector      = ConvergenceDetector(TRI.training_data, TRI.config)
         self.abs_error_for_epoch    = 0
         self.bd_correct             = 0
@@ -50,15 +51,15 @@ class VCR:
         samples = strategy[epoch]
         return -1 in samples or sample_index in samples
 
-    def record_sample_num(self, record_sample: RecordSample, layers: List[List[Neuron]]):
+    def record_sample(self, record_sample: RecordSample, layers: List[List[Neuron]]):
         """
-        Add the current sample_num data to the database
+        Add the current sample data to the database
         """
         self.abs_error_for_epoch += abs(record_sample.error_unscaled)
-        if record_sample.is_true: self.bd_correct += 1
+        if record_sample.is_true is True: self.bd_correct += 1
 
 
-        record_weight_updates_from_finalize = self.maybe_finalize_batch(record_sample.sample_num,   self.TRI.training_data.sample_count, self.TRI.config.batch_size,  self.TRI.config.optimizer.finalizer)
+        record_weight_updates_from_finalize = self.maybe_finalize_batch(record_sample.sample,   self.TRI.training_data.sample_count, self.TRI.config.batch_size,  self.TRI.config.optimizer.finalizer)
 
         if any(record_weight_updates_from_finalize):
             self.record_weight_updates(record_weight_updates_from_finalize, "finalize")
@@ -80,27 +81,27 @@ class VCR:
 
 
                 # Add the neuron data to the database
-                self.TRI.db.add(neuron, exclude_keys={"activation", "learning_rate", "weights", "weights_before"}, run_id=self.TRI.run_id, epoch=record_sample.epoch, sample_num=record_sample.sample_num)
-        self.bulk_insert_weights(run_id = self.TRI.run_id, epoch=record_sample.epoch, sample_num=record_sample.sample_num )
+                self.TRI.db.add(neuron, exclude_keys={"activation", "learning_rate", "weights", "weights_before"}, run_id=self.TRI.run_id, epoch=record_sample.epoch, sample=record_sample.sample)
+        self.bulk_insert_weights(run_id = self.TRI.run_id, epoch=record_sample.epoch, sample=record_sample.sample )
 
-    def maybe_finalize_batch(self, sample_num: int, total_samples: int, batch_size: int, finalizer_fn) -> list:
-        if sample_num % batch_size == 0:
-            # replaced with the below to standardize batch_id handling return finalizer_fn(batch_size, self.epoch_curr_number, sample_num)  # Normal batch
-            return self.finish_batch(batch_size,sample_num,finalizer_fn)
-        elif sample_num == total_samples:
+    def maybe_finalize_batch(self, sample: int, total_samples: int, batch_size: int, finalizer_fn) -> list:
+        if sample % batch_size == 0:
+            # replaced with the below to standardize batch_id handling return finalizer_fn(batch_size, self.epoch_curr_number, sample)  # Normal batch
+            return self.finish_batch(batch_size,sample,finalizer_fn)
+        elif sample == total_samples:
             remainder = total_samples % batch_size
             if remainder > 0:
-                # replaced with the below to standardize batch_id handlingreturn finalizer_fn(remainder, self.epoch_curr_number, sample_num)  # Final mini-batch
-                return self.finish_batch(remainder,sample_num,finalizer_fn)
+                # replaced with the below to standardize batch_id handlingreturn finalizer_fn(remainder, self.epoch_curr_number, sample)  # Final mini-batch
+                return self.finish_batch(remainder,sample,finalizer_fn)
         return []  # Nothing to finalize this round
 
-    def finish_batch(self, batch_size, sample_num, finalizer_fn) -> list:
+    def finish_batch(self, batch_size, sample, finalizer_fn) -> list:
         """
             Runs the optimizer's finalizer function with the correct batch_id,
             and increments the internal batch counter for the next batch.
             This ensures all finalizers remain stateless and batch_id is standardized.
         """
-        finalizer_log = finalizer_fn(batch_size, self.epoch_curr_number, sample_num, self.batch_id)  # Normal batch
+        finalizer_log = finalizer_fn(batch_size, self.epoch_curr_number, sample, self.batch_id)  # Normal batch
         self.batch_id += 1    #increment batch number
         return finalizer_log
 
@@ -113,20 +114,30 @@ class VCR:
             self.TRI.lowest_mae         = mae
             self.TRI.lowest_mae_epoch   = epoch
 
-        self.TRI.bd_correct             = self.bd_correct
-
+        self.TRI.bd_correct = self.bd_correct
         # Track best accuracy (mirror pattern for lowest_mae)
         current_accuracy = self.TRI.accuracy
         if current_accuracy > self.TRI.best_accuracy:
             self.TRI.best_accuracy = current_accuracy
             self.TRI.best_accuracy_epoch = epoch
 
+        epoch_record = RecordEpoch(
+            run_id=self.TRI.run_id,
+            epoch=epoch,
+            correct=self.bd_correct,
+            wrong=self.sample_count - self.bd_correct,
+            accuracy=current_accuracy,
+            mae=mae
+        )
+        self.TRI.db.add(epoch_record)
+
         # Early stop on perfect accuracy for classification
-        if self.TRI.training_data.problem_type=="Binary Decision" and current_accuracy == 100:
-            return "Perfect Accuracy"
+        #if self.TRI.training_data.problem_type=="Binary Decision" and current_accuracy == 100:
+        #    return "Perfect Accuracy"
 
         self.abs_error_for_epoch        = 0                        # Reset for next epoch
-        self.bd_correct                 = 0                                 # Reset for next epoch
+
+        self.bd_correct             = 0                        # Reset for next epoch
         self.epoch_curr_number          += 1
         val = "Did Not Converge"  #TODO self.converge_detector.check_convergence(self.epoch_curr_number, mae )
         return val
@@ -138,7 +149,7 @@ class VCR:
     ############# Record Backpass info for pop up window of NeuroForge #############
     def record_weight_updates(self, weight_update_metrics, update_or_finalize: str):
         """
-        Inserts weight update calculations for the current sample_num into the database.
+        Inserts weight update calculations for the current sample into the database.
         Compatible with arbitrary arg/op chains.
         """
         if not self.TRI.should_record(RecordLevel.FULL ): return
@@ -172,8 +183,8 @@ class VCR:
         return [x.item() if hasattr(x, 'item') else x for x in row]
 
     def build_weight_update_field_list(self, sample_row):
-        #base_fields = ["epoch", "sample_num", "model_id", "nid", "weight_index", "batch_id"]
-        base_fields = ["epoch", "sample_num", "nid", "weight_index", "batch_id"]
+        #base_fields = ["epoch", "sample", "model_id", "nid", "weight_index", "batch_id"]
+        base_fields = ["epoch", "sample", "nid", "weight_index", "batch_id"]
         custom_fields = []
         # Now create one custom field per element after the first six (base fields).
         for i in range(5, len(sample_row)):
@@ -193,7 +204,7 @@ class VCR:
 
     def record_blame_calculations(self, blame_calculations):
         """
-        Inserts all backprop calculations for the current sample_num into the database.
+        Inserts all backprop calculations for the current sample into the database.
         """
 
         #print("********  Distribute Error Calcs************")
@@ -202,7 +213,7 @@ class VCR:
         if not self.TRI.should_record(RecordLevel.FULL ): return
         sql = """
         INSERT INTO ErrorSignalCalcs
-        (epoch, sample_num, run_id, nid, weight_id, 
+        (epoch, sample, run_id, nid, weight_id, 
          arg_1, op_1, arg_2, op_2, arg_3, op_3, result)
         VALUES 
         (?, ?, ?, ?, ?, 
@@ -220,7 +231,7 @@ class VCR:
         self.TRI.db.executemany(sql, blame_calculations, "error signal")
         blame_calculations.clear()
 
-    def bulk_insert_weights(self,run_id, epoch, sample_num):
+    def bulk_insert_weights(self,run_id, epoch, sample):
         """
         Collects all weight values across neurons and creates a bulk insert SQL statement.
         """
@@ -229,9 +240,9 @@ class VCR:
             for neuron in layer:
                 for weight_id, (prev_weight, weight) in enumerate(zip(neuron.weights_before, neuron.weights)):
                     sql_statements.append(
-                        f"({run_id}, {epoch}, {sample_num}, {neuron.nid}, {weight_id}, {prev_weight}, {weight})"
+                        f"({run_id}, {epoch}, {sample}, {neuron.nid}, {weight_id}, {prev_weight}, {weight})"
                     )
 
         if sql_statements:
-            sql_query = f"INSERT INTO Weight (run_id, epoch, sample_num, nid, weight_id, value_before, value) VALUES {', '.join(sql_statements)};"
+            sql_query = f"INSERT INTO Weight (run_id, epoch, sample, nid, weight_id, value_before, value) VALUES {', '.join(sql_statements)};"
             self.db.execute(sql_query, "Weight")

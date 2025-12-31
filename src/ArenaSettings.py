@@ -11,7 +11,7 @@ class HyperParameters():
         ############################################################
 
         self.epochs_to_run           : int   = 30     # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 4        # Qty of training data
+        self.training_set_size       : int   = 14        # Qty of training data
         self.random_seed             : int   = 181467    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
         self.seed_replicates         : int   = 3         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
@@ -52,40 +52,50 @@ class HyperParameters():
 
 
         self.arenas = ['RepaymentFromCreditScore']
-        self.arenas = ['CarValueFromMiles']
-        self.gladiators=['AutoForge'] #,'TitanicOpus']
+        #self.arenas = ['CarValueFromMiles']
+        self.gladiators=['AutoForge','AutoForgeDup'] #,'TitanicOpus']
+        #self.gladiators = ['AutoForge']  # ,'TitanicOpus']
 
 
 
     """
+    GOAL OF NF Refactor.  (All WIP)
+    1) Resolution independence.    
+    1.5) Move buttons out of neurofore.
+    2) No pygamegui BS
+    
+    3) rebuild arrows each frame... they were not following the neurons when a layer was  scrolled.
+    3) No RGB in code.
+    4) Limit of 2 models.
+    5) Gracefully handle if epoch-sample is not available.
+    6) show geometry for 2 input neurons.   decision boundries.
+    7) Ensure all buttons make sense - buttonmenu - buttonbase, probably more.    
+    
     GOAL OF REFACTORS
-1) Treat bias like a weight in NNA
+1) DONE Treat bias like a weight in NNA
 
-3) Binary Classification logic.
+3)DONE  Binary Classification logic.
   - Detects: target has exactly 2 distinct values
   - Stores: label_low, label_high (unscaled)
   - Computes: threshold = (label_low + label_high) / 2
   - Classifies: unscaled_prediction > threshold → label_high, else label_low
   - Optionally warns: if activation/loss combo is suspect
 4) Partial Recordings
-5) System for file paths
-6) DRY!  No recalcing in NF
-7) Early stopping
+5) DONE System for file paths
+6) DONE DRY!  No recalcing in NF
+7) Improve Early stopping
 8) Clean serialization
-8) Fix name iteration -> sample everywhere.
-9) TRI, ModelInfo, Iteration have Dry issues - Place for everything and eveything in it-s place
-- For DB bound anything.
-- IterationRecord
-- EpochRecord
-- RunRecord
-10) Leverge RamDB for all sql.(eliminate all or nearly all sql)
-11) Boycot the ridiculous underscore prefix pretending to be a scope modifier... give us option explicit and don't use it if you are stupid.
+8) DONE Fix name iteration -> sample everywhere.
+9) DONE TRI, ModelInfo, Iteration have Dry issues - Place for everything and eveything in it-s place
+10) Boycot the ridiculous underscore prefix pretending to be a scope modifier... give us option explicit and don't use it if you are stupid.
 
 *** Hills i won't die on.  Punting for now - revise after clean refactor.
 # reorder sample
 # training/test data
 # Using LAG instead of storing every weight before and after.
-# Remove squared_error from iteration.
+# button_base - Hover visual feedback (color change)
+#  button_base - Pressed visual feedback (button depresses)
+#  button_base - Disabled state
 
 """
 
