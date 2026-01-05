@@ -44,25 +44,22 @@ class RecordSample:
     def relative_error(self) -> float:
         return abs(self.error / (self.target + 1e-64))
 
-
-
-
     @property
     def is_false(self) -> int:
-        return not self.is_true
+        return int(self.is_true == False)
 
     @property
     def is_true_positive(self) -> int:
-        return int(self.is_true and self.target != 0)
+        return int(self.is_true == True and self.target != 0)
 
     @property
     def is_true_negative(self) -> int:
-        return int(self.is_true and self.target == 0)
+        return int(self.is_true == True and self.target == 0)
 
     @property
     def is_false_positive(self) -> int:
-        return int(not self.is_true and self.target == 0)
+        return int(self.is_true == False and self.target == 0)
 
     @property
     def is_false_negative(self) -> int:
-        return int(not self.is_true and self.target != 0)
+        return int(self.is_true == False and self.target != 0)

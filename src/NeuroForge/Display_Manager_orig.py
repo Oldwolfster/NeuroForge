@@ -1,26 +1,25 @@
 from typing import List
 import pygame
 
-from src.NeuroForge.DisplayModel import DisplayModel
-from src.NeuroForge.ButtonBase import  Button_Base
-from src.NeuroForge.DisplayPanelTarget import DisplayPanelTarget
-from src.NeuroForge.PopupErrorAnalysis import PopupErrorAnalysis
-from src.NeuroForge.PopupInfoButton import PopupInfoButton
-from src.NeuroForge.PopupTrainingData import PopupTrainingData
-from src.NNA.engine.Config import Config
-from src.NNA.engine.RamDB import RamDB
+from typing import List
+import pygame
+from itertools import chain
 from src.NeuroForge import Const
-from src.NNA.engine.UtilsPyGame import draw_rect_with_border, draw_text_with_background,  check_label_collision, get_text_rect, beautify_text
-from src.NNA.engine.Utils import ez_debug
-from src.NeuroForge.DisplayArrowsOutsideNeuron import DisplayArrowsOutsideNeuron
+from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
+from src.NNA.engine.RamDB import RamDB
+from src.NeuroForge.ButtonBase import Button_Base
+from src.NeuroForge.DisplayArrowsOutsideModel import DisplayArrowsOutsideNeuron
 from src.NeuroForge.DisplayBanner import DisplayBanner
 from src.NeuroForge.DisplayPanelCtrl import DisplayPanelCtrl
 from src.NeuroForge.DisplayPanelInput import DisplayPanelInput
 from src.NeuroForge.DisplayPanelPrediction import DisplayPanelPrediction
+from src.NeuroForge.DisplayPanelTarget import DisplayPanelTarget
 from src.NeuroForge.GeneratorModel import ModelGenerator
-from src.NeuroForge.ui.BaseWindow import BaseWindow
-from src.NeuroForge.ui.WindowMatches import WindowMatches
-from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
+from src.NeuroForge.PopupErrorAnalysis import PopupErrorAnalysis
+from src.NeuroForge.PopupInfoButton import PopupInfoButton
+from src.NeuroForge.PopupTrainingData import PopupTrainingData
+from src_revert.NNA.utils.general_text import beautify_text
+
 
 class Display_Manager:
     """
@@ -62,7 +61,7 @@ class Display_Manager:
         # DELETE ME self.get_max_epoch_per_model(self.db)
         self.populate_list_of_available_frames()
         Const.MAX_EPOCH     = self.get_max_epoch(self.db)
-        Const.MAX_ITERATION = self.get_max_iteration(self.db)
+        Const.MAX_SAMPLE = self.get_max_iteration(self.db)
         Const.MAX_WEIGHT    = self.get_max_weight(self.db)
         Const.MAX_ERROR     = self.get_max_error(self.db)
 
@@ -208,7 +207,7 @@ class Display_Manager:
 
     def initialize_components(self):
         """Initialize UI components like EZForm-based input panels and model displays."""
-        display_banner = DisplayBanner(Const.TRIs[0].training_data, Const.MAX_EPOCH, Const.MAX_ITERATION)
+        display_banner = DisplayBanner(Const.TRIs[0].training_data, Const.MAX_EPOCH, Const.MAX_SAMPLE)
         self.components.append(display_banner)
         panel_width = 8
 

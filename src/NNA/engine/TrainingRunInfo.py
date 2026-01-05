@@ -52,6 +52,11 @@ class TrainingRunInfo:
             return 0.0
         return max(0.0, (1.0 - (self.mae / mean_target)) * 100)
 
+    @property
+    def time_seconds(self) -> float:
+        if self.time_start is not None and self.time_end is not None:
+            return (self.time_end - self.time_start).total_seconds()
+        return -1.0
 
     @property
     def accuracy_bd(self) -> float:

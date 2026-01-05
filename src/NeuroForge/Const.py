@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from src.NeuroForge.VCR             import VCR
 vcr: "VCR" = None
 
-
 # ==============================
 # UI Constants
 # ==============================
@@ -86,8 +85,6 @@ TOOLTIP_LINE_OVER_HEADER_Y        = 0   # Y position under header row
 TOOLTIP_HEADER_DIVIDER_THICKNESS   = 2
 TOOLTIP_COLUMN_DIVIDER_THICKNESS   = 1
 
-
-
 # ==============================
 # UI Customization
 # ==============================
@@ -105,31 +102,39 @@ FONT_SIZE_SMALL     = 20
 # Colors
 # ==============================
 COLOR_BLACK             = (0, 0, 0)
+COLOR_BLACK_NEAR        = (26, 26, 26)
 COLOR_BLUE              = (50, 50, 255)
+COLOR_BLUE_CORNFLOWER   = (122, 139, 214)
+COLOR_BLUE_GREY         = (225, 230, 245)
+COLOR_BLUE_LIGHT        = (235, 238, 248)
 COLOR_BLUE_PURE         = (0, 0, 255)
 COLOR_BLUE_MIDNIGHT     = (25, 25, 112)
-COLOR_BLUE_STEEL        = (70, 130, 180)
 COLOR_BLUE_SKY          = (135, 206, 235)
+COLOR_BLUE_STEEL        = (70, 130, 180)
+COLOR_BLUE_SUBORDINATE  = (130, 138,165)
+COLOR_CREAM             = (255, 255, 200)
 COLOR_CRIMSON_BU_RED    = (204, 0, 0)
 COLOR_CRIMSON           = (220, 20, 60)
 COLOR_CYAN              = (0, 255, 255)
 COLOR_GRAY_DIM          = (105, 105, 105)
 COLOR_GRAY_DARK         = (64, 64, 64)
-
 COLOR_GREEN             = (0, 128, 0)
 COLOR_GREEN_FOREST      = (34, 139, 34)
 COLOR_GREEN_JADE        = (60, 179, 113)
 COLOR_GREEN_KELLY       = (34, 170, 34)
+COLOR_PERIWINKLE        = (170, 175,210)
 COLOR_RED_FIREBRICK     = (178, 34, 34)
 COLOR_RED_BURGUNDY      = (139,   0, 0)
 COLOR_ORANGE            = (255, 165, 0)
-COLOR_YELLOW_BRIGHT     = (255, 215, 0)
 COLOR_WHITE             = (255, 255, 255)
-COLOR_CREAM             = (255, 255, 200)
+COLOR_YELLOW_BRIGHT     = (255, 215, 0)
+
+
 
 #Below is Colors  by Purpose rather than color name.
 COLOR_FOR_BANNER        = (0, 0, 255)
 COLOR_FOR_SHADOW        = (30, 30, 100)  # Darker blue for depth
+COLOR_FOR_POPUP         = COLOR_CREAM
 COLOR_FOR_BACKGROUND    = COLOR_WHITE
 COLOR_FOR_BANNER_START  = COLOR_BLUE_MIDNIGHT
 COLOR_FOR_BANNER_END    = COLOR_BLUE_STEEL
@@ -143,6 +148,12 @@ COLOR_FOR_BAR1_POSITIVE = COLOR_GREEN_KELLY
 COLOR_FOR_BAR1_NEGATIVE = COLOR_RED_FIREBRICK
 COLOR_FOR_BAR2_POSITIVE = COLOR_GREEN_JADE
 COLOR_FOR_BAR2_NEGATIVE = COLOR_RED_BURGUNDY
+COLOR_FOR_HDR_BCK       = COLOR_BLUE_LIGHT
+COLOR_FOR_HDR_BTM       = COLOR_PERIWINKLE
+COLOR_FOR_TXT_BG        = COLOR_BLUE_GREY
+COLOR_FOR_TXT_BORDER    = COLOR_BLUE_CORNFLOWER
+COLOR_FOR_TXT_TXT       = COLOR_BLACK_NEAR
+COLOR_FOR_TXT_PH        = COLOR_BLUE_SUBORDINATE
 COLOR_eh                = (220, 255, 220)
 COLOR_HIGHLIGHT_FILL    = COLOR_eh
 COLOR_HIGHLIGHT_BORDER  = (218, 165, 32)

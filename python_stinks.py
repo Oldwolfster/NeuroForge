@@ -8,12 +8,19 @@ Purpose 2) Enumerate all the things that makes python 25 out of 26 in languages 
 1) No simple easy way to consistently access file system... Between the relative to file called from/started from/package it's quite likely you will think your pointing at one file but point at 2.
 1.4) range(1, 10) gives you 9 numbers because Guido believes "end" is just a suggestion.
 1.5) Encapsulation by naming convention is the software equivalent of locking your front door with a sticky note that says “please don’t.”
-
 2) Not declaring variables turns a simple synax defect that is easy to fix in to a hidden "logic" defect that is a bomb waiting to blow your ass up
 2.5) __slots__ is a joke.
 3) Get scope modifiers.  underscore as a convention with no teeth sucks!
 4) “Flat is better than nested.”— But don’t you dare flatten a one-line if
-5) I put self in 99% of my damn parameter lists and 99% of my method calls... couldn't we just assume unless otherwise specified?
+5) I put self in 99% of my damn parameter lists and 99% of my method calls... couldn't we just assume 'self' unless otherwise specified? It's like C requiring you to pass this as the first parameter to every function.
+
+WTF////
+Guido says clarity over cleverness... this proves guido is on crack!
+funcs = []
+for i in range(3):
+    funcs.append(lambda: i)
+funcs[0]()   # surprise.... how TF does this = 2?  Because closures capture names, not values
+
 6) Order dependency... For the love of god, i haven't had to deal with nuisance since PASCAL, have some decency and do two passes.
 7) Get a real multiline comment token... jeez
 8) Get a real inline comment syntax... jeez louise!!

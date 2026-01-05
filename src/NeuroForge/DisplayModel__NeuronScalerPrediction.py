@@ -31,6 +31,7 @@ class DisplayModel__NeuronScalerPrediction:
         self.need_label_coord           = True #track if we recorded the label positions for the arrows to point from
 
     def render(self):                   #self.debug_weight_changes()
+
         rs                              = Const.dm.get_sample_data(self.neuron.run_id)
         prediction_raw                  = rs.get("prediction_raw",  "[]")
         prediction_unscaled             = rs.get("prediction_unscaled",  "[]")
@@ -63,10 +64,6 @@ class DisplayModel__NeuronScalerPrediction:
                 except (ValueError, TypeError):
                     pass
 
-
-
-
-
         self.draw_top_plane()
         self.output_one_set(2, prediction_raw, "Prediction", prediction_unscaled)
         self.output_one_set(1, target_raw,"Target", target_unscaled)
@@ -88,7 +85,7 @@ class DisplayModel__NeuronScalerPrediction:
             text_color=Const.COLOR_WHITE,
             padding=8
         )
-        #print(f"LABEL1 ={label}")
+
         if self.need_label_coord: #  and raw_value == "Prediction":
             self.label_y_positions.append((self.neuron.location_left + self.oval_overhang + self.neuron.location_width, y_pos+ self.oval_height * .5))
             if raw_value == "Prediction":

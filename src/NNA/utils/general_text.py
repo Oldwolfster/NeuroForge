@@ -82,6 +82,23 @@ def is_numeric(text):
     # If we're left with only digits, it's numeric
     return text.isdigit()
 
+def format_percent(x: float, decimals: int = 2, max_value: float = 1000.0) -> str:
+    """
+    Format a fraction x (e.g. 0.9999) as a percentage string:
+      • two decimal places normally → "99.99%"
+      • no trailing .00 → "100%"
+      • gradient explosions → "OVERFLOW"
+    """
+    # Check for gradient explosion (anything beyond max_value)
+    if abs(x) > max_value:
+        return "OVERFLOW" if x > 0 else "-OVERFLOW"
+
+    # Normal formatting
+    s = f"{x:.{decimals}f}"
+    s = s.rstrip("0").rstrip(".")
+    return s + "%"
+
+
 def wrap_text(text, max_len):
     """Wrap text to max_len characters per line, breaking at word boundaries."""
     words = text.split()

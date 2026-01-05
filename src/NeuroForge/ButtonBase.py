@@ -21,7 +21,7 @@ class Button_Base:
         shadow_offset: int = 5,
         main_color=Const.COLOR_BLUE,
         shadow_color=Const.COLOR_FOR_SHADOW,
-        border_radius: int = 3,
+        border_radius: int = 61,
         font_size: int = 32,
         auto_size: bool = False,
         padding: int = 10,
@@ -30,6 +30,7 @@ class Button_Base:
         text_line2_color = None,             # NEW: color for second line (defaults to same as line 1)
         text_line2_offset: int = 0,
         surface_offset: Tuple[int, int] = (0, 0),
+        tooltip_text: str = None,
 
     ):
         # parent surface for relative sizing
@@ -79,6 +80,8 @@ class Button_Base:
         self.shadow_color = shadow_color
         self.border_radius = border_radius
         self.padding = padding
+        self.is_pressed = False  # NEW
+        self.tooltip_text = tooltip_text
 
     def update_me(self):
         pass
@@ -86,71 +89,100 @@ class Button_Base:
     def render_tooltip(self):
         if self.on_hover is not None:
             self.on_hover()
+        elif self.tooltip_text:
+            self.draw_simple_tooltip()
 
+    def draw_simple_tooltip(self):
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        font = pygame.font.SysFont(None, 24)
+        text_surf = font.render(self.tooltip_text, True, Const.COLOR_BLACK)
+        padding = 6
+        w = text_surf.get_width() + padding * 2
+        h = text_surf.get_height() + padding * 2
+        x = mouse_x + 12
+        y = mouse_y + 12
+
+        # Keep on screen
+        if x + w > Const.SCREEN_WIDTH:
+            x = mouse_x - w - 4
+        if y + h > Const.SCREEN_HEIGHT:
+            y = mouse_y - h - 4
+
+        pygame.draw.rect(Const.SCREEN, Const.COLOR_FOR_POPUP, (x, y, w, h))
+        pygame.draw.rect(Const.SCREEN, Const.COLOR_BLACK, (x, y, w, h), 1)
+        Const.SCREEN.blit(text_surf, (x + padding, y + padding))
 
     def draw_me(self):
-        # draw shadow
-        #print(f"I am a button - my text is {self.text}")
-        shadow_rect = self.button_rect.move(self.shadow_offset, abs(self.shadow_offset))
-        pygame.draw.rect(
-            self.surface,
-            self.shadow_color,
-            shadow_rect,
-            border_radius=self.border_radius,
-        )
-        # draw main button
+        # When pressed, shift button down/right and skip shadow
+        if self.is_pressed:
+            draw_rect = self.button_rect.move(2, 2)
+        else:
+            # Draw shadow first
+            shadow_rect = self.button_rect.move(self.shadow_offset, abs(self.shadow_offset))
+            pygame.draw.rect(
+                self.surface,
+                self.shadow_color,
+                shadow_rect,
+                border_radius=self.border_radius,
+            )
+            draw_rect = self.button_rect
+
+        # Draw main button
         pygame.draw.rect(
             self.surface,
             self.main_color,
-            self.button_rect,
+            draw_rect,
             border_radius=self.border_radius,
         )
-        # draw first line
+
+        # Draw text (centered on draw_rect, not button_rect)
         text_surf1 = self.font.render(self.text, True, self.text_color)
 
         if self.text_line2:
-            # Two lines: position first line near top
             rect1 = text_surf1.get_rect(
                 center=(
-                    self.button_rect.centerx,
-                    self.button_rect.top + self.padding + text_surf1.get_height() / 2
+                    draw_rect.centerx,
+                    draw_rect.top + self.padding + text_surf1.get_height() / 2
                 )
             )
             self.surface.blit(text_surf1, rect1)
 
-            # Draw second line below first
             text_surf2 = self.font.render(self.text_line2, True, self.text_line2_color)
             rect2 = text_surf2.get_rect(
                 center=(
-                    self.button_rect.centerx,
+                    draw_rect.centerx,
                     rect1.bottom + text_surf2.get_height() / 2 + self.padding / 2 + self.text_line2_offset
                 )
             )
             self.surface.blit(text_surf2, rect2)
         else:
-            # Single line: center vertically in button
-            rect1 = text_surf1.get_rect(center=self.button_rect.center)
+            rect1 = text_surf1.get_rect(center=draw_rect.center)
             self.surface.blit(text_surf1, rect1)
 
-    def process_an_event(self, event):
-        """
-        Handle mouse events, translating global coordinates into surface-local coordinates
-        before checking for clicks on the button.
-        """
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            gx, gy = event.pos
-            # translate to this surface's local coordinates
-            lx = gx - self.offset_x
-            ly = gy - self.offset_y
-            # if click falls within the button rect, fire callback
-            if self.button_rect.collidepoint((lx, ly)):
-                if callable(self.on_click):
-                    self.on_click()
 
-    def is_hovered(self, model_x, model_y, mouse_x, mouse_y):
-        """Checks if mouse is in rectangle, translating for surface offset."""
-        local_x = mouse_x - self.offset_x
-        local_y = mouse_y - self.offset_y
-        return self.button_rect.collidepoint((local_x, local_y))
+
+    def process_an_event(self, event):
+        """Handle mouse events with press/release tracking."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            lx = event.pos[0] - self.offset_x
+            ly = event.pos[1] - self.offset_y
+            if self.button_rect.collidepoint((lx, ly)):
+                self.is_pressed = True
+
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.is_pressed:
+                self.is_pressed = False
+                # Fire callback only if released while still over button
+                lx = event.pos[0] - self.offset_x
+                ly = event.pos[1] - self.offset_y
+                if self.button_rect.collidepoint((lx, ly)):
+                    if callable(self.on_click):
+                        self.on_click()
+
+    def get_global_rect(self):
+        return pygame.Rect(self.left + self.offset_x,
+                           self.top + self.offset_y,
+                           self.width,
+                           self.height)
 
 

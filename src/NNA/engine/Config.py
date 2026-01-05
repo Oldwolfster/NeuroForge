@@ -6,6 +6,7 @@ from src.NNA.Legos.Scaler import *
 from src.NNA.Legos._LegoAutoML import LegoAutoML
 
 
+
 class Config:
     """ Single(final) source of truth for the model configuration.
         The Gladiator's values will be stored here.
@@ -31,11 +32,13 @@ class Config:
         self.scaler                 : MultiScaler           = MultiScaler(TRI.training_data)
 
     def autoML(self):
+        from src.NNA.engine.TrainingRunInfo import RecordLevel
         self.update_from_batch_sweep(self.TRI.setup)
 
-        print(self.TRI.training_data.raw_data)
-        print(f"this data's problem type is '{self.TRI.training_data.problem_type}'")
-        LegoAutoML().apply(self, self.get_rules(), self.TRI)
+
+        #print(f"this data's problem type is '{self.TRI.training_data.problem_type}'")
+        ok_to_print =  self.TRI.record_level != RecordLevel.NONE
+        LegoAutoML(ok_to_print).apply(self, self.get_rules())
         self.finish_setup()
 
     def update_from_batch_sweep(self, setup):

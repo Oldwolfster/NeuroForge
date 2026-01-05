@@ -228,6 +228,7 @@ class VCR:
         #print(f"BLAME {self.blame_calculations}")
 
         #Heads up, sometimes overflow error look like key violation here
+
         self.TRI.db.executemany(sql, blame_calculations, "error signal")
         blame_calculations.clear()
 

@@ -1,5 +1,6 @@
 from typing import List
 
+from src.NNA.utils.general_text import wrap_text
 #from src.NNA.engine.UtilsPyGame import wrap_text
 from src.NeuroForge.Popup_Base import Popup_Base
 from src.NeuroForge import Const

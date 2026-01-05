@@ -10,8 +10,8 @@ class HyperParameters():
         # BATTLE Parameters are set here                           #
         ############################################################
 
-        self.epochs_to_run           : int   = 30     # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 14        # Qty of training data
+        self.epochs_to_run           : int   = 8     # Number of times training run will cycle through all training data
+        self.training_set_size       : int   = 8        # Qty of training data
         self.random_seed             : int   = 181467    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
         self.seed_replicates         : int   = 3         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
@@ -53,27 +53,43 @@ class HyperParameters():
 
         self.arenas = ['RepaymentFromCreditScore']
         #self.arenas = ['CarValueFromMiles']
+        #self.arenas = ['Titanic8']
         self.gladiators=['AutoForge','AutoForgeDup'] #,'TitanicOpus']
         #self.gladiators = ['AutoForge']  # ,'TitanicOpus']
 
-
-
     """
-    GOAL OF NF Refactor.  (All WIP)
-    1) Resolution independence.    
-    1.5) Move buttons out of neurofore.
-    2) No pygamegui BS
+Cleanup list
+    1) Several popups need to be added
+    3) DONE Thresholder visualization
+    4) DONE Speed and jump to epoch controls
+    5) Resolution-independent polish pass
+    7) DONE Error history graph    
+    9) DONE  color error analysis panel red/green
+    10) DONE Model Banner    
+    12) Double check in DisplayModel_NeuornScaler => 'output_surface = font.render(self.activation_function, True,' i
+    13) Double check, do we need accumulated accepted blame in the Neuron table?
+    15) DONEWe have max blame for both model and manager.... are we using both?  which should we use?
+    8) DONE sample button
+    11) DONE VCR tool tips
+    6) DONE:LR sweep
+    14) DONE: looks like it is drawing two output neurons - full architecture:  [-1, 3, 2, 2, -1] search yo -
+    in displaymodel render() we should only be drawing visible neurons
+GOAL OF6NF Refactor.  
+    1) Resolution independence.
+    2) DONE Remove pygamegui dependency        
+    3) DONE rebuild arrows each frame... they were not following the neurons when a layer was  scrolled.
+    3) DONE No RGB in code.
+    4) DONE Limit of 2 models.
     
-    3) rebuild arrows each frame... they were not following the neurons when a layer was  scrolled.
-    3) No RGB in code.
-    4) Limit of 2 models.
-    5) Gracefully handle if epoch-sample is not available.
     6) show geometry for 2 input neurons.   decision boundries.
-    7) Ensure all buttons make sense - buttonmenu - buttonbase, probably more.    
+    7) DONE Ensure all button classes make sense - buttonmenu - buttonbase, probably more.    
+    8) Menu working
+    9) DONE - button_base - Pressed visual feedback (button depresses)
     
-    GOAL OF REFACTORS
+          
+    GOAL OF REFACTOR NNA
+    
 1) DONE Treat bias like a weight in NNA
-
 3)DONE  Binary Classification logic.
   - Detects: target has exactly 2 distinct values
   - Stores: label_low, label_high (unscaled)
@@ -90,13 +106,13 @@ class HyperParameters():
 10) Boycot the ridiculous underscore prefix pretending to be a scope modifier... give us option explicit and don't use it if you are stupid.
 
 *** Hills i won't die on.  Punting for now - revise after clean refactor.
+# Graceful handling of missing epoch-sample frames
 # reorder sample
 # training/test data
 # Using LAG instead of storing every weight before and after.
 # button_base - Hover visual feedback (color change)
-#  button_base - Pressed visual feedback (button depresses)
 #  button_base - Disabled state
-
+# Would it pay to stop rebuilding fonts everywhere?
 """
 
 """

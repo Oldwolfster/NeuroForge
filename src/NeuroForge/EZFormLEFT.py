@@ -12,7 +12,7 @@ class EZForm(EZSurface):
     def __init__(self, fields: Dict[str, str], width_pct: int, height_pct: int,
                  left_pct: int, top_pct: int, banner_text="Form",
                  banner_color=Const.COLOR_BLUE, bg_color=Const.COLOR_FOR_BACKGROUND,
-                 font_color=Const.COLOR_BLACK, shadow_offset=6, same_line=False):
+                 font_color=Const.COLOR_BLACK, shadow_offset=6, same_line=False, hover_popup=None):
 
         self.fields = fields
         self.banner_text = banner_text
@@ -20,6 +20,7 @@ class EZForm(EZSurface):
         self.font_color = font_color
         self.same_line = same_line
         self.shadow_offset = shadow_offset
+        self.hover_popup = hover_popup
 
         # Fonts
         self.banner_font = pygame.font.Font(None, 36)
@@ -62,13 +63,16 @@ class EZForm(EZSurface):
                          border_radius=4)
 
     def draw_banner(self):
-        pygame.draw.rect(self.surface, self.banner_color, self.banner_rect, border_radius=4)
+        pygame.draw.rect(self.surface, self.banner_color, self.banner_rect, border_radius=5)
         text_surface = self.banner_font.render(self.banner_text, True, Const.COLOR_WHITE)
         text_rect = text_surface.get_rect(center=(self.form_rect.centerx, self.banner_height // 2))
         self.surface.blit(text_surface, text_rect)
 
     def draw_border(self):
-        pygame.draw.rect(self.surface, self.banner_color, self.form_rect, 3, border_radius=4)
+        new_rect = self.form_rect.copy()
+        new_rect.top += 2
+        new_rect.height -= 2
+        pygame.draw.rect(self.surface, self.banner_color, new_rect, 3, border_radius=4)
 
     def draw_fields(self):
         if not self.fields:
@@ -144,3 +148,7 @@ class EZForm(EZSurface):
             self.banner_color = Const.COLOR_BANNER_CORRECT
         else:
             self.banner_color = Const.COLOR_BANNER_WRONG
+
+    def render_tooltip(self):
+        if self.hover_popup:
+            self.hover_popup.show_me()

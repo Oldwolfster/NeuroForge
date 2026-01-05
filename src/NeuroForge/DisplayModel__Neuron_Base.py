@@ -61,7 +61,7 @@ class DisplayModel__Neuron_Base:
         self.weights                = []
         self.neuron_inputs          = []
         self.max_per_weight         = []
-        self.activation_function    = ""
+        self.activation_function    = self.get_activation_function()
         self.raw_sum                = 0.0
         self.activation_value       = 0.0
         self.activation_gradient    = 0.0
@@ -73,7 +73,6 @@ class DisplayModel__Neuron_Base:
         self.banner_text            = ""
         self.tooltip_columns        = []
         self.weight_adjustments     = ""
-        self.blame_calculations     = ""
         self.avg_err_sig_for_epoch  = 0.0
         self.loss_gradient          = 0.0
         self.neuron_build_text      = "fix me"
@@ -94,6 +93,7 @@ class DisplayModel__Neuron_Base:
             self.banner_text = self.label
             if self.text_version == "Verbose":
                 self.banner_text = f"Hidden Neuron {self.label}"
+        print (f"yo - {self.banner_text} nid={nid}")
         #self.neuron_build_text = self.neuron_build_text_large if text_version == "Verbose" else self.neuron_build_text_small
 
         # Calculate and store banner text width for blame bar calculations
@@ -110,6 +110,13 @@ class DisplayModel__Neuron_Base:
         """Override to have code run after contstructor"""
         pass
 
+    def get_activation_function(self) -> str:
+        #print(f"actication function:  NID = {self.nid} layer = {self.layer}  Arch{len(self.TRI.config.architecture)}")
+        if self.layer == -1: return "Not that kind of neuron"
+        if self.layer +1 == len(self.TRI.config.architecture):  #output neuron
+            return self.TRI.config.output_activation
+        else:
+            return self.TRI.config.hidden_activation
 
 
     def calculate_banner_text_width(self):
@@ -121,13 +128,12 @@ class DisplayModel__Neuron_Base:
         text_surface = font.render(self.banner_text, True, Const.COLOR_FOR_NEURON_TEXT)
         self.banner_text_width = text_surface.get_width() + 15  # Add padding for safety
 
-    def is_hovered(self, model_x, model_y, mouse_x, mouse_y):
-        """
-        Check if the mouse is over this neuron.
-        """
-        neuron_x = model_x + self.location_left
-        neuron_y = model_y + self.location_top
-        return (neuron_x <= mouse_x <= neuron_x + self.location_width) and (neuron_y <= mouse_y <= neuron_y + self.location_height)
+
+    def get_global_rect(self):
+        return pygame.Rect(self.model.left + self.location_left,
+                           self.model.top + self.location_top,
+                           self.location_width,
+                           self.location_height)
 
     def draw_neuron(self):
         """Draw the neuron visualization."""
@@ -236,12 +242,9 @@ class DisplayModel__Neuron_Base:
             return False  # No results found
         self.rs = rs[0]
         self.loss_gradient =  float(rs[0].get("loss_gradient", 0.0))
-        self.blame_calculations = rs[0].get("blame_calculations")
         self.neuron_inputs = json.loads( rs[0].get("neuron_inputs"))
-        #ez_debug(selfneuinp= self.neuron_inputs)
 
         # Activation function details
-        self.activation_function    = rs[0].get('activation_name', 'Unknown')
         self.activation_value       = rs[0].get('activation_value', None)        #THE OUTPUT
         self.blame                  = rs[0].get('error_signal', 'Unknown')  # Accepted blame
         self.activation_gradient    = rs[0].get('activation_gradient', None)  # From neuron
@@ -890,11 +893,11 @@ class DisplayModel__Neuron_Base:
         row_labels.append( get_activation_derivative_formula(f"{self.activation_function}"))
         #TODO only add below if space permits
         row_labels.extend(["(How much 'Raw Sum' contri-","butes to final prediction)"])        #So, for hidden neurons, a better description might be something like:ow much the neuron's raw sum, after being transformed by its activation function, contributes to the propagation of error through the network."
-        inputs[1] = " "  #"N/A" # remove the 1 for bias
+        #inputs[1] = " "  #"N/A" # remove the 1 for bias
         return all_columns
 
     def tooltip_column_forward_pass_one_inputs(self,sample_data):
-        input_col =["Input","1"]
+        input_col =["Input"]
         input_col.extend(self.neuron_inputs)
         return input_col
 

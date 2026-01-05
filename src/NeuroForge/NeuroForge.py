@@ -9,30 +9,6 @@ from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
 from typing import List
 
 
-def initialize_display(fullscreen):
-    """Initialize display dimensions. Call after pygame.init()."""
-    if fullscreen:
-        display_info = pygame.display.Info()
-        Const.SCREEN_WIDTH = display_info.current_w
-        Const.SCREEN_HEIGHT = display_info.current_h
-        Const.SCREEN = pygame.display.set_mode((Const.SCREEN_WIDTH, Const.SCREEN_HEIGHT), pygame.FULLSCREEN)
-    else:
-        Const.SCREEN_WIDTH = 1900
-        Const.SCREEN_HEIGHT = 900
-        Const.SCREEN = pygame.display.set_mode((Const.SCREEN_WIDTH, Const.SCREEN_HEIGHT))
-
-    # Compute derived values
-    Const.MODEL_AREA_PIXELS_LEFT = Const.SCREEN_WIDTH * Const.MODEL_AREA_PERCENT_LEFT
-    Const.MODEL_AREA_PIXELS_TOP = Const.SCREEN_HEIGHT * Const.MODEL_AREA_PERCENT_TOP
-    Const.MODEL_AREA_PIXELS_WIDTH = Const.SCREEN_WIDTH * Const.MODEL_AREA_PERCENT_WIDTH
-    Const.MODEL_AREA_PIXELS_HEIGHT = Const.SCREEN_HEIGHT * Const.MODEL_AREA_PERCENT_HEIGHT
-
-
-def quit_neuroforge():
-    """Clean shutdown - can be called from anywhere."""
-    Const.IS_RUNNING = False
-
-
 def NeuroForge(TRIs: List[TrainingRunInfo], fullscreen=False):
     """Initialize NeuroForge and run the visualization loop."""
 
@@ -64,3 +40,24 @@ def NeuroForge(TRIs: List[TrainingRunInfo], fullscreen=False):
         pygame.display.flip()
         clock.tick(60)
     pygame.quit()
+
+def initialize_display(fullscreen):
+    """Initialize display dimensions. Call after pygame.init()."""
+    if fullscreen:
+        display_info = pygame.display.Info()
+        Const.SCREEN_WIDTH = display_info.current_w
+        Const.SCREEN_HEIGHT = display_info.current_h
+        Const.SCREEN = pygame.display.set_mode((Const.SCREEN_WIDTH, Const.SCREEN_HEIGHT), pygame.FULLSCREEN)
+    else: Const.SCREEN = pygame.display.set_mode((Const.SCREEN_WIDTH, Const.SCREEN_HEIGHT))
+
+    # Compute derived values
+    Const.MODEL_AREA_PIXELS_LEFT = Const.SCREEN_WIDTH * Const.MODEL_AREA_PERCENT_LEFT
+    Const.MODEL_AREA_PIXELS_TOP = Const.SCREEN_HEIGHT * Const.MODEL_AREA_PERCENT_TOP
+    Const.MODEL_AREA_PIXELS_WIDTH = Const.SCREEN_WIDTH * Const.MODEL_AREA_PERCENT_WIDTH
+    Const.MODEL_AREA_PIXELS_HEIGHT = Const.SCREEN_HEIGHT * Const.MODEL_AREA_PERCENT_HEIGHT
+
+
+def quit_neuroforge():
+    """Clean shutdown - can be called from anywhere."""
+    Const.IS_RUNNING = False
+

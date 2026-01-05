@@ -40,6 +40,9 @@ class EZSurface(ABC):
         self.bg_color = bg_color
         self.surface.fill(self.bg_color)
 
+    def get_global_rect(self):
+        return pygame.Rect(self.left, self.top, self.width, self.height)
+
     @abstractmethod
     def render(self):
         """Render custom content - implemented by child classes."""

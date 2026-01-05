@@ -102,18 +102,18 @@ class VCR:
         """Jump to specific sample, snap to nearest recorded frame"""
         try:
             target_sample = int(sample_str)
-            if 1 <= target_sample <= Const.MAX_ITERATION:
+            if 1 <= target_sample <= Const.MAX_SAMPLE:
                 self.pause()
                 snapped_epoch, snapped_iter = self.get_nearest_frame(self._cur_epoch, target_sample)
                 self._cur_epoch = snapped_epoch
                 self._CUR_SAMPLE = snapped_iter
                 self.validate_and_sync()
             else:
-                print(f"⚠️ Sample out of range! Must be between 1 and {Const.MAX_ITERATION}.")
+                print(f"⚠️ Sample out of range! Must be between 1 and {Const.MAX_SAMPLE}.")
         except ValueError:
             print("⚠️ Invalid input! Please enter a valid sample number.")
 
-    def step_x_iteration(self, step: int, pause_me=False):
+    def step_x_samples(self, step: int, pause_me=False):
         """Move specified iterations forward or backward"""
         if pause_me:
             self.pause()
@@ -121,9 +121,9 @@ class VCR:
         if step < 0 and Const.vcr.CUR_SAMPLE == 1:
             if Const.vcr.CUR_EPOCH > 1:
                 Const.vcr.CUR_EPOCH -= 1
-                Const.vcr.CUR_SAMPLE = Const.MAX_ITERATION
+                Const.vcr.CUR_SAMPLE = Const.MAX_SAMPLE
             return
-        elif step > 0 and Const.vcr.CUR_SAMPLE == Const.MAX_ITERATION:
+        elif step > 0 and Const.vcr.CUR_SAMPLE == Const.MAX_SAMPLE:
             if Const.vcr.CUR_EPOCH < Const.MAX_EPOCH:
                 Const.vcr.CUR_EPOCH += 1
                 Const.vcr.CUR_SAMPLE = 1
@@ -158,13 +158,13 @@ class VCR:
         if self.advance_by_epoch == 1:
             self.step_x_epochs(self.direction)
         else:
-            self.step_x_iteration(self.direction)
+            self.step_x_samples(self.direction)
 
     def validate_and_sync(self):
         """Keep values in bounds and refresh display data"""
         if Const.vcr.CUR_EPOCH > Const.MAX_EPOCH:
             Const.vcr.CUR_EPOCH = Const.MAX_EPOCH
-            Const.vcr.CUR_SAMPLE = Const.MAX_ITERATION
+            Const.vcr.CUR_SAMPLE = Const.MAX_SAMPLE
             self.pause()
 
         if Const.vcr.CUR_EPOCH < 1:
@@ -178,7 +178,7 @@ class VCR:
 
         if Const.vcr.CUR_SAMPLE < 1:
             Const.vcr.CUR_EPOCH = max(1, Const.vcr.CUR_EPOCH - 1)
-            Const.vcr.CUR_SAMPLE = Const.MAX_ITERATION
+            Const.vcr.CUR_SAMPLE = Const.MAX_SAMPLE
 
         Const.dm.query_data_sample()
         Const.dm.query_data_epoch()

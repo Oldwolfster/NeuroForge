@@ -40,7 +40,7 @@ class DisplayModel__Layer:
         is_comfortable = (actual_height >= self.MIN_HEIGHT_STANDARD)
 
         self.needs_controls = (not is_output_layer) and (not is_comfortable)
-        print(f"Layer {self.layer_index}: height={actual_height:.1f}, comfortable={is_comfortable}, output={is_output_layer}, needs_controls={self.needs_controls}")
+        #print(f"Layer {self.layer_index}: height={actual_height:.1f}, comfortable={is_comfortable}, output={is_output_layer}, needs_controls={self.needs_controls}")
 
         if self.needs_controls:
             self.current_offset = 0
@@ -53,7 +53,8 @@ class DisplayModel__Layer:
         if not self.needs_controls:
             for neuron in self.neurons:
                 neuron.on_screen = True
-
+                is_graph_placeholder = is_output_layer and (neuron.position == len(self.neurons) - 1)
+                if not is_graph_placeholder:            Const.dm.hoverlings.append(neuron)
         return self.needs_controls
 
     def recalculate_visible_count(self):
@@ -64,8 +65,9 @@ class DisplayModel__Layer:
     def apply_visibility(self):
         """Mark neurons visible based on current offset and count."""
         for i, neuron in enumerate(self.neurons):
-            neuron.on_screen = (self.current_offset <= i < self.current_offset + self.visible_count)
-
+            neuron.on_screen        = (self.current_offset <= i < self.current_offset + self.visible_count)
+            if neuron.on_screen:    Const.dm.hoverable_neurons.add(neuron)
+            else:                   Const.dm.hoverable_neurons.discard(neuron)
     def reposition_visible_neurons(self):
         """Calculate positions for visible neurons."""
         if self.visible_count < 1:
@@ -171,9 +173,8 @@ class DisplayModel__Layer:
         scroll_width = 30
         zoom_width = 70
         button_height = 28
-        gap = 4
+        gap = 2
         bar_width = 2 * scroll_width + gap + zoom_width
-
         global_left = self.model.left + self.x_position
         start_x = int(global_left + (self.width - bar_width) / 2)
         y = int(self.model.top + 10)
@@ -186,9 +187,11 @@ class DisplayModel__Layer:
                 height_pct=(button_height / screen_height) * 100,
                 left_pct=(x / screen_width) * 100,
                 top_pct=(y / screen_height) * 100,
+                border_radius=2,
                 on_click=on_click,
                 shadow_offset=-3,
                 font_size=font_size,
+
                 padding=4,
                 text_line2=text_line2,
                 text_line2_color=text_line2_color,
@@ -196,6 +199,15 @@ class DisplayModel__Layer:
             )
             self.control_buttons.append(btn)
             return btn
+
+        layer_frame = LayerFrame(
+            left=global_left,
+            top=y - 4,
+            width=self.width,
+            height= button_height + 8
+        )
+        #self.control_buttons.append(layer_frame)
+
 
         self.scroll_up_button = make_button(start_x, scroll_width, "+", self.scroll_up, 22)
 
@@ -205,3 +217,40 @@ class DisplayModel__Layer:
 
         minus_x = zoom_x + zoom_width + gap
         self.scroll_down_button = make_button(minus_x, scroll_width, "-", self.scroll_down, 22)
+
+
+
+class LayerFrame:
+    """
+    Thin header strip that visually scopes layer-local controls.
+    Draw-only object (no interaction).
+    """
+
+    def __init__(self, left, top, width, height,):
+        self.rect = pygame.Rect(
+            int(left),
+            int(top),
+            int(width),
+            int(height)
+        )
+
+    def process_an_event(self, event): pass
+
+    def update_me(self): pass
+    def draw_me(self, ):
+        # Header background
+        pygame.draw.rect(
+            Const.SCREEN,
+            Const.COLOR_FOR_HDR_BCK,
+            self.rect,
+            border_radius=6
+        )
+
+        # Bottom separator (1px)
+        pygame.draw.line(
+            Const.SCREEN,
+            Const.COLOR_FOR_HDR_BTM,
+            (self.rect.left, self.rect.bottom - 1),
+            (self.rect.right, self.rect.bottom - 1),
+            1
+        )

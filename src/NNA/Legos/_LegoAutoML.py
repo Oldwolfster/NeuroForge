@@ -1,29 +1,36 @@
 from dataclasses import asdict
 from typing import Any
 
+
+
 class LegoAutoML:
-    def __init__(self):
+    def __init__(self, ok_to_print):
         self.applied_rules = []
         self.seen_prints = set()
         self.applied_pairs = set()
 
-        print(f"\t🧠🧠 Welcome to 'Smart Configuration' Anything not set in your model will be set to optimal conditions(hopefully) 🧠🧠")
-        print(f"\t🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠")
-        print(f"\t🧠🧠 Settings Set:🧠🧠")
-        print(f"\t🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠")
+        self.ok_to_print = ok_to_print
+
+        if (self.ok_to_print):
+            print(f"\t🧠🧠 Welcome to 'Smart Configuration' Anything not set in your model will be set to optimal conditions(hopefully) 🧠🧠")
+            print(f"\t🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠")
+            print(f"\t🧠🧠 Settings Set:🧠🧠")
+            print(f"\t🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠")
 
     def maybe_print(self, text_to_print_once: str) -> None:
+        if not self.ok_to_print: return
         if text_to_print_once not in self.seen_prints:
             print(text_to_print_once)
             self.seen_prints.add(text_to_print_once)
 
-    def apply(self, config, rules, tri):
+    def apply(self, config, rules):
         # track which rule‐indices we’ve applied (and to what value)
         # keep running until no rule makes an actual change
-        while self.apply_single_rule(config, rules, tri):
+
+        while self.apply_single_rule(config, rules):
             pass
 
-    def apply_single_rule(self, config, rules, tri) -> bool:
+    def apply_single_rule(self, config, rules) -> bool:
         """
         Returns True if it applied one rule (and mutated config).
         """

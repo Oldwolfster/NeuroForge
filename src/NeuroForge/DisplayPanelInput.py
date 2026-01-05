@@ -13,7 +13,7 @@ class DisplayPanelInput(EZForm):
     """Panel displaying input values for the current sample."""
 
     def __init__(self, width_pct: int, height_pct: int, left_pct: int, top_pct: int,
-                 bg_color=Const.COLOR_WHITE, banner_color=Const.COLOR_BLUE):
+                 bg_color=Const.COLOR_WHITE, banner_color=Const.COLOR_BLUE, hover_popup=None):
         training_data = Const.TRIs[0].training_data
         input_labels = training_data.feature_labels[:-1]  # All but target
 
@@ -29,7 +29,8 @@ class DisplayPanelInput(EZForm):
             banner_color=banner_color,
             bg_color=bg_color,
             font_color=Const.COLOR_BLACK,
-            same_line=True
+            same_line=True,
+            hover_popup=hover_popup
         )
 
     def update_me(self):

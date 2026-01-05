@@ -25,7 +25,7 @@ class AutoForge_TEMPLATE(Gladiator):
 
         config.architecture            = [3,2,1]
         config.optimizer                = Optimizer_SGD
-        config.learning_rate           = 0.1
+        config.learning_rate           = 0.01
         config.weight_initializer      = Initializer_He
         #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_NoDamnFunction

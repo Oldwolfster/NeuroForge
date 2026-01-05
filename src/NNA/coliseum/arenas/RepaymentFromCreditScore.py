@@ -17,5 +17,5 @@ class PutAnyNameHereOnlyFileMatters(BaseArena):
             repayment = 1 if random.random() < (score / 100) else 0
             #repayment = 0 if random.random() < (score / 100) else 1
             training_data.append((score, repayment))
-        return training_data,     ["Credit Score", "Repaid?"], [ "Paid It!","Defaulted"]
+        return training_data,     ["Credit Score", "Repaid?"], [ "Defaulted","Paid It!"]
         return training_data, ["Credit Score", "Repaid?"], ["Defaulted","Paid It!"]

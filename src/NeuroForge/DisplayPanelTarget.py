@@ -1,18 +1,12 @@
-# DisplayPanelTarget.py
-
-import pygame
-
 from src.NNA.utils.general_text import smart_format
 from src.NeuroForge import Const
 from src.NeuroForge.EZFormLEFT import EZForm
-
-
 
 class DisplayPanelTarget(EZForm):
     """Panel displaying the target value for the current sample."""
 
     def __init__(self, width_pct: int, height_pct: int, left_pct: int, top_pct: int,
-                 bg_color=Const.COLOR_WHITE, banner_color=Const.COLOR_BLUE):
+                 bg_color=Const.COLOR_WHITE, banner_color=Const.COLOR_BLUE, hover_popup=None):
         training_data = Const.TRIs[0].training_data
         self.target_name = training_data.feature_labels[-1]
 
@@ -27,7 +21,8 @@ class DisplayPanelTarget(EZForm):
             banner_text="Target",
             banner_color=banner_color,
             bg_color=bg_color,
-            font_color=Const.COLOR_BLACK
+            font_color=Const.COLOR_BLACK,
+            hover_popup=hover_popup
         )
 
     def update_me(self):

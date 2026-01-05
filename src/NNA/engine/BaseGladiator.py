@@ -55,7 +55,7 @@ class Gladiator(ABC):
 
     def configure_everything(self):
         self.configure_model(self.config)              # Typically overwritten in child (gladiator) class.
-        ez_debug(arch=self.config.architecture)
+        #ez_debug(arch=self.config.architecture)
         self.config.autoML()
         self.initialize_neurons()
         self.customize_neurons(self.config)            # Typically overwritten in child  class.
@@ -93,7 +93,7 @@ class Gladiator(ABC):
             None
         """
         epochs_to_run = self.TRI.hyper.epochs_to_run if exploratory_epochs == 0 else exploratory_epochs
-        print(f"epoch_to_run{epochs_to_run}")
+        #print(f"epoch_to_run{epochs_to_run}")
         for epoch in range(1, epochs_to_run + 1):                       # Loop to run specified # of epochs
             if should_print_epoch(epoch,exploratory_epochs):            print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             self.TRI.converge_cond = self.run_an_epoch(epoch)           # Call function to run single epoch
@@ -152,20 +152,32 @@ class Gladiator(ABC):
         )
         self.VCR.record_sample(sample_results, Neuron.layers)
 
-
     def optimize_passes(self, sample_scaled):
         prediction_raw = self.forward_pass(sample_scaled)
-        if prediction_raw > 1e21:
-            return "Gradient Explosion", None, None
         if prediction_raw is None:
             raise ValueError(f"{self.__class__.__name__}.forward_pass must return a value for sample={sample_scaled!r}")
 
         error_scaled, loss, loss_gradient = self.judge_pass(sample_scaled, prediction_raw)
         self.back_pass(sample_scaled, loss_gradient)
 
+        if self.has_gradient_explosion():
+            self.blame_calculations.clear()
+            self.weight_calculations.clear()
+            return "Gradient Explosion", None, None
+
         self.VCR.record_blame_calculations(self.blame_calculations)
         self.VCR.record_weight_updates(self.weight_calculations, "update")
         return error_scaled, loss, loss_gradient
+
+    def has_gradient_explosion(self):
+        """Check if any neuron value has exploded."""
+        import math
+        for layer in Neuron.layers:
+            for neuron in layer:
+                for val in [neuron.error_signal, neuron.activation_value] + neuron.weights:
+                    if val is None:                        continue
+                    if math.isnan(val) or math.isinf(val) or abs(val) > 1e21:   return True
+        return False
 
     def forward_pass(self, sample):
         inputs = sample[:-1]

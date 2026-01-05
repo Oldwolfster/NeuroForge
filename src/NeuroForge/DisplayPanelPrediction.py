@@ -9,7 +9,7 @@ class DisplayPanelPrediction(EZForm):
     __slots__ = ("run_id", "problem_type", "loss_function", "target_name")
 
     def __init__(self, run_id: int, problem_type: str, TRI,
-                 width_pct: int, height_pct: int, left_pct: int, top_pct: int):
+                 width_pct: int, height_pct: int, left_pct: int, top_pct: int, **kwargs):
 
         self.run_id         = run_id
         self.problem_type   = problem_type
@@ -30,7 +30,8 @@ class DisplayPanelPrediction(EZForm):
             left_pct=left_pct,
             top_pct=top_pct,
             banner_text="Error Stats",
-            banner_color=Const.COLOR_BLUE
+            banner_color=Const.COLOR_BLUE,
+            **kwargs
         )
 
     def update_me(self):
@@ -48,12 +49,13 @@ class DisplayPanelPrediction(EZForm):
 
         # Binary Decision banner feedback
         if self.problem_type == "Binary Decision":
-            if is_true is True:
+            if is_true:
                 self.banner_text = "Correct"
                 self.set_colors(1)
-            elif is_true is False:
+            else:
                 self.banner_text = "Wrong"
                 self.set_colors(0)
+
 
         self.fields["Sample Error"] = smart_format(error)
         self.fields["Epoch Avg Err"] = smart_format(avg_error)

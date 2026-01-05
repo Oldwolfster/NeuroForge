@@ -17,7 +17,7 @@ class Popup_Base:
         self.font_title             = pygame.font.Font(None, Const.TOOLTIP_FONT_TITLE)
 
     def show_me(self):       #Actually draws it, MUST be last so need to  store delegate and run after all other drawing
-        state = (Const.vcr.CUR_EPOCH_MASTER, Const.vcr.CUR_ITERATION)
+        state = (Const.vcr.CUR_EPOCH, Const.vcr.CUR_SAMPLE)
         if state != self.last_state:
             self.last_state = state
             self.cached_surf = self._draw()

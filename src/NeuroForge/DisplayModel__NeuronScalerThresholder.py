@@ -20,7 +20,6 @@ class DisplayModel__NeuronScalerThresholder:
         self.font               = pygame.font.Font(None, Const.FONT_SIZE_WEIGHT)
         diamond_center_x        = self.DIAMOND_OFFSET_FROM_OUTPUT + self.neuron.model.neurons[-1][-1].location_left + self.neuron.model.neurons[-1][-1].location_width
         self.diamond_center     = (diamond_center_x, self.DIAMOND_Y_OFFSET)
-        self.diamond_center     = (diamond_center_x, self.DIAMOND_Y_OFFSET)
 
         self.arrow_targets      = [(diamond_center_x, self.DIAMOND_Y_OFFSET - self.DIAMOND_RADIUS * 2),
                                    (diamond_center_x + self.DIAMOND_RADIUS * 2, self.DIAMOND_Y_OFFSET ),
@@ -28,18 +27,18 @@ class DisplayModel__NeuronScalerThresholder:
                                    ]
 
     def render(self):
-        """Main render method - external API"""
+
         # Get current iteration data
-        rs = Const.dm.get_model_iteration_data(self.neuron.run_id)
+        rs = Const.dm.get_sample_data (self.neuron.run_id)
         is_correct = rs.get("is_true")
 
         # Get labels
-        alpha_text = self.neuron.TRI.training_data.target_labels[0]  # NO/False
-        alpha_value = self.neuron.TRI.bd_target_alpha_unscaled
+        alpha_text = self.neuron.TRI.BD.label_min  # NO/False
+        alpha_value = self.neuron.TRI.BD.target_min
         alpha_display = f"{round(alpha_value)} - {alpha_text}"
 
-        beta_text = self.neuron.TRI.training_data.target_labels[1]  # YES/True
-        beta_value = self.neuron.TRI.bd_target_beta_unscaled
+        beta_text = self.neuron.TRI.BD.label_max  # YES/True
+        beta_value = self.neuron.TRI.BD.target_max
         beta_display = f"{round(beta_value)} - {beta_text}"
 
         # Determine what was ACTUALLY predicted using the classification flags       # These flags already capture the threshold logic correctly
@@ -59,7 +58,7 @@ class DisplayModel__NeuronScalerThresholder:
         else:              alpha_color = (100, 100, 120)  # Inactive gray # Model did NOT choose NO
 
         # Draw everything
-        threshold = self.neuron.TRI.bd_threshold
+        threshold = self.neuron.TRI.BD.threshold
         self.draw_diamond_shape(self.diamond_center, self.DIAMOND_RADIUS, Const.COLOR_BLUE, self.font,f"> {threshold}", Const.COLOR_BLUE_PURE, 2)
         self.draw_rounded_text_box(self.arrow_targets[0], alpha_display,  Const.COLOR_WHITE, alpha_color, self.font)
         self.draw_rounded_text_box(self.arrow_targets[2], beta_display,   Const.COLOR_WHITE, beta_color, self.font)
