@@ -1,7 +1,4 @@
-from src.NNA.engine.RamDB import RamDB
-from src.NNA.Legos.Optimizer import *
-from src.NNA.Legos.Loss import *
-from src.NNA.Legos.Initializer import *
+from src.NNA.utils.RamDB import RamDB
 from pathlib import Path
 
 class HyperParameters():
@@ -11,7 +8,7 @@ class HyperParameters():
         ############################################################
 
         self.epochs_to_run           : int   = 8     # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 8        # Qty of training data
+        self.training_set_size       : int   = 20        # Qty of training data
         self.random_seed             : int   = 181467    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
         self.seed_replicates         : int   = 3         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
@@ -21,13 +18,37 @@ class HyperParameters():
         self.batch_notes             : str   = ''
         #use_match_ui            : bool  = False  # Default to current workflow
 
+
+        ############################################################
+        # Optimizer-Specific Hyperparameters                       #
+        ############################################################
+        # Adam / AdamW / NAdam / AdaMax
+        self.adam_beta1             : float = 0.9           # Momentum decay rate
+        self.adam_beta2             : float = 0.999         # RMSprop decay rate
+        self.adam_epsilon           : float = 1e-8          # Numerical stability
+
+        # RMSprop / Adadelta
+        self.rmsprop_beta           : float = 0.9           # Decay rate for moving average
+
+        # Simplex
+        self.simplex_growth_rate    : float = 1.05          # LR multiplier when stable
+        self.simplex_decay_rate     : float = 0.5           # LR multiplier on explosion
+        self.simplex_threshold      : float = None          # None = auto (input_max * 5)
+
+        # Momentum
+        self.momentum_beta          : float = 0.9           # Momentum coefficient
+
+
+
         self.dimensions = {
             # "loss_function": [Loss_MSE, Loss_BCE, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
             # "hidden_activation": [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
             # "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
             # "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
             # "initializer": "*",
-            # "architecture": [[4, 4, 1], [2, 2, 1]],
+            #"architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
+            "architecture": [[2,2, 1]],
+            #"output_activation": [Activation_NoDamnFunction]
             #"seed":[1,2,3],
             #"loss":  Loss_HalfWit,
             #"optimizer": [Optimizer_SGD, Optimizer_Adam],
@@ -55,10 +76,12 @@ class HyperParameters():
         #self.arenas = ['CarValueFromMiles']
         #self.arenas = ['Titanic8']
         self.gladiators=['AutoForge','AutoForgeDup'] #,'TitanicOpus']
-        #self.gladiators = ['AutoForge']  # ,'TitanicOpus']
+        self.gladiators = ['AutoForge']  # ,'TitanicOpus']
 
     """
 Cleanup list
+MAYBE EARLY STOPPING
+RENAME ERROR SIGNAL TO ACCEPTED_BLAME
     1) Several popups need to be added
     3) DONE Thresholder visualization
     4) DONE Speed and jump to epoch controls

@@ -45,7 +45,7 @@ class DisplayPanelPrediction(EZForm):
         loss_gradient = rs_sample.get("loss_gradient", 0.0)
         is_true       = rs_sample.get("is_true")
 
-        avg_error = rs_epoch.get("mean_absolute_error_unscaled", 0.0) if rs_epoch else 0.0
+        avg_error = rs_epoch.get("mae", 0.0) if rs_epoch else 0.0
 
         # Binary Decision banner feedback
         if self.problem_type == "Binary Decision":

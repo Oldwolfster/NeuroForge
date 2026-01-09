@@ -20,7 +20,7 @@ class Neuron:
         self.learning_rates = [learning_rate] * len(self.weights)
         #self.m = [0.0] * len(self.weights)  # Adam momentum
         #self.v = [0.0] * len(self.weights)  # Adam variance
-        self.accumulated_accepted_blame = [0.0] * len(self.weights)
+        self.accumulated_leverage = [0.0] * len(self.weights)
         #self.t = 0  # Timestep counter for optimizer
 
         # Activation
@@ -28,7 +28,7 @@ class Neuron:
         self.raw_sum                = 0.0
         self.activation_value       = 0.0
         self.activation_gradient    = 0.0
-        self.error_signal           = 0.0
+        self.accepted_blame           = 0.0
 
         # Register in class collections
         Neuron.neurons.append(self)
@@ -42,4 +42,4 @@ class Neuron:
 
     def activate(self):
         self.activation_value = self.activation(self.raw_sum)
-        self.activation_gradient = self.activation.derivative(self.raw_sum)
+        self.activation_gradient = self.activation.derivative(self.activation_value)

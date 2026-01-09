@@ -1,23 +1,12 @@
 import json
-import sqlite3
-from json import dumps
 from typing import List
-
-
-
 from .Neuron import Neuron
-from .RamDB import RamDB
-
-from src.ArenaSettings import HyperParameters
+from src.NNA.utils.RamDB import RamDB
 from .RecordEpoch import RecordEpoch
 from .RecordSample import RecordSample
-from .TrainingData import TrainingData
 from .TrainingRunInfo import TrainingRunInfo, RecordLevel
 
 #from src.NNA.engine.convergence.ConvergenceDetector import ConvergenceDetector
-from typing import Dict
-
-
 
 
 class VCR:
@@ -36,87 +25,56 @@ class VCR:
         self.convergence_signal     = None      # Will be set by convergence detector
         self.backpass_finalize_info = []
 
-    def should_record_sample(self, epoch: int, sample_index: int) -> bool:
-        # ✅ Always record the first sample of every epoch
-        if sample_index == 1:
-            return True
-
-        strategy = self.hyper.record_sample_strategy
-
-        # ✅ If no override for this epoch, do not record
-        if epoch not in strategy:
-            return False
-
-        # ✅ Record if the sample is explicitly listed (or all are, via -1)
-        samples = strategy[epoch]
-        return -1 in samples or sample_index in samples
-
     def record_sample(self, record_sample: RecordSample, layers: List[List[Neuron]]):
-        """
-        Add the current sample data to the database
-        """
+        """Record sample data — optimizer handles its own weight update logging now"""
         self.abs_error_for_epoch += abs(record_sample.error_unscaled)
-        if record_sample.is_true is True: self.bd_correct += 1
+        if record_sample.is_true is True:
+            self.bd_correct += 1
 
+        if not self.TRI.should_record(RecordLevel.FULL):
+            return
 
-        record_weight_updates_from_finalize = self.maybe_finalize_batch(record_sample.sample,   self.TRI.training_data.sample_count, self.TRI.config.batch_size,  self.TRI.config.optimizer.finalizer)
-
-        if any(record_weight_updates_from_finalize):
-            self.record_weight_updates(record_weight_updates_from_finalize, "finalize")
-
-        if not self.TRI.should_record(RecordLevel.FULL ): return
         self.TRI.db.add(record_sample)
 
-        # Iterate over layers and neurons
         for layer_index, layer in enumerate(layers):
-
             for neuron in layer:
-                if layer_index == 0:  # First hidden layer (takes raw sample inputs)
-                    raw_inputs = json.loads(record_sample.inputs)  # Parse JSON string to list
-                    neuron.neuron_inputs =  [1.0] + raw_inputs
-                    #print(f"storing neuron data First Hidden Layer (Layer 0). nid={neuron.nid}, inputs={neuron.neuron_inputs}")
-                else:   # All subsequent layers - NOTE: Output is not considered a layer in respect to these neurons
+                if layer_index == 0:
+                    raw_inputs = json.loads(record_sample.inputs)
+                    neuron.neuron_inputs = [1.0] + raw_inputs
+                else:
                     previous_layer = layers[layer_index - 1]
                     neuron.neuron_inputs = [1.0] + [prev.activation_value for prev in previous_layer]
 
+                self.TRI.db.add(
+                    neuron,
+                    exclude_keys={"activation", "learning_rate", "weights", "weights_before"},
+                    run_id=self.TRI.run_id,
+                    epoch=record_sample.epoch,
+                    sample_id=record_sample.sample_id
+                )
 
-                # Add the neuron data to the database
-                self.TRI.db.add(neuron, exclude_keys={"activation", "learning_rate", "weights", "weights_before"}, run_id=self.TRI.run_id, epoch=record_sample.epoch, sample=record_sample.sample)
-        self.bulk_insert_weights(run_id = self.TRI.run_id, epoch=record_sample.epoch, sample=record_sample.sample )
-
-    def maybe_finalize_batch(self, sample: int, total_samples: int, batch_size: int, finalizer_fn) -> list:
-        if sample % batch_size == 0:
-            # replaced with the below to standardize batch_id handling return finalizer_fn(batch_size, self.epoch_curr_number, sample)  # Normal batch
-            return self.finish_batch(batch_size,sample,finalizer_fn)
-        elif sample == total_samples:
-            remainder = total_samples % batch_size
-            if remainder > 0:
-                # replaced with the below to standardize batch_id handlingreturn finalizer_fn(remainder, self.epoch_curr_number, sample)  # Final mini-batch
-                return self.finish_batch(remainder,sample,finalizer_fn)
-        return []  # Nothing to finalize this round
-
-    def finish_batch(self, batch_size, sample, finalizer_fn) -> list:
-        """
-            Runs the optimizer's finalizer function with the correct batch_id,
-            and increments the internal batch counter for the next batch.
-            This ensures all finalizers remain stateless and batch_id is standardized.
-        """
-        finalizer_log = finalizer_fn(batch_size, self.epoch_curr_number, sample, self.batch_id)  # Normal batch
-        self.batch_id += 1    #increment batch number
-        return finalizer_log
+        self.bulk_insert_weights(
+            run_id=self.TRI.run_id,
+            epoch=record_sample.epoch,
+            sample=record_sample.sample_id
+        )
 
     def finish_epoch(self, epoch: int):
+        """End of epoch — flush optimizer buffer, record stats"""
+        # Flush any remaining optimizer data
+        self.TRI.config.optimizer.flush(self.TRI)
+
         self.TRI.last_epoch = epoch
         mae = self.abs_error_for_epoch / self.TRI.training_data.sample_count
-        #print(f"mae={mae}")
         self.TRI.mae = mae
+
         if self.TRI.lowest_mae > mae:
-            self.TRI.lowest_mae         = mae
-            self.TRI.lowest_mae_epoch   = epoch
+            self.TRI.lowest_mae = mae
+            self.TRI.lowest_mae_epoch = epoch
 
         self.TRI.bd_correct = self.bd_correct
-        # Track best accuracy (mirror pattern for lowest_mae)
         current_accuracy = self.TRI.accuracy
+
         if current_accuracy > self.TRI.best_accuracy:
             self.TRI.best_accuracy = current_accuracy
             self.TRI.best_accuracy_epoch = epoch
@@ -131,22 +89,28 @@ class VCR:
         )
         self.TRI.db.add(epoch_record)
 
-        # Early stop on perfect accuracy for classification
-        #if self.TRI.training_data.problem_type=="Binary Decision" and current_accuracy == 100:
-        #    return "Perfect Accuracy"
+        self.abs_error_for_epoch = 0
+        self.bd_correct = 0
+        self.epoch_curr_number += 1
 
-        self.abs_error_for_epoch        = 0                        # Reset for next epoch
+        return "Did Not Converge"  # TODO: convergence detector
 
-        self.bd_correct             = 0                        # Reset for next epoch
-        self.epoch_curr_number          += 1
-        val = "Did Not Converge"  #TODO self.converge_detector.check_convergence(self.epoch_curr_number, mae )
-        return val
+    def bulk_insert_weights(self, run_id, epoch, sample):
+        """Bulk insert all weight values"""
+        sql_statements = []
+        for layer in Neuron.layers:
+            for neuron in layer:
+                for weight_id, (prev_weight, weight) in enumerate(zip(neuron.weights_before, neuron.weights)):
+                    sql_statements.append(
+                        f"({run_id}, {epoch}, {sample}, {neuron.nid}, {weight_id}, {prev_weight}, {weight})"
+                    )
+
+        if sql_statements:
+            sql_query = f"INSERT INTO Weight (run_id, epoch, sample, nid, weight_id, value_before, value) VALUES {', '.join(sql_statements)};"
+            self.db.execute(sql_query, "Weight")
 
 
-    ############# Record Backpass info for pop up window of NeuroForge #############
-    ############# Record Backpass info for pop up window of NeuroForge #############
-    ############# Record Backpass info for pop up window of NeuroForge #############
-    ############# Record Backpass info for pop up window of NeuroForge #############
+############# Record Backpass info for pop up window of NeuroForge #############
     def record_weight_updates(self, weight_update_metrics, update_or_finalize: str):
         """
         Inserts weight update calculations for the current sample into the database.

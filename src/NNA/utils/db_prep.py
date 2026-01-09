@@ -1,7 +1,7 @@
 from src.NNA.Legos.Activation import Activation_NoDamnFunction
 from src.NNA.Legos.Initializer import Initializer_Tiny
 from src.NNA.engine.Neuron import Neuron
-from src.NNA.engine.RamDB import RamDB
+from src.NNA.utils.RamDB import RamDB
 from src.NNA.engine.RecordSample import RecordSample
 
 
@@ -37,18 +37,18 @@ def create_weight_adjustments_table(db: RamDB, run_id: int, update_or_finalize: 
 def prep_RamDB():
     db = RamDB()
 
-    # Create dummy records to create table so we can create the view
+    # Create dummy records to create table so we can create the view and indexes
 
-    dummy_sample = RecordSample(is_true=0, run_id=0, epoch=0, sample=0, inputs="", target=0.1, prediction=0.1,
+    dummy_sample = RecordSample(is_true=0, run_id=0, epoch=0, sample_id=0, inputs="", target=0.1, prediction=0.1,
                                 inputs_unscaled="", target_unscaled=0.1, prediction_unscaled=0.1, prediction_raw=0.1,
                                 loss=0.1, loss_gradient=0.1, loss_function="dummy", accuracy_threshold=0.0, prediction_label="eatme")
     dummy_neuron = Neuron(0, 1, 0.0, Initializer_Tiny, 0,activation=Activation_NoDamnFunction)
     db.add(dummy_sample)
 
-    db.add(dummy_neuron, exclude_keys={"activation", "output_neuron"}, run_id=0, epoch=0, sample=0)
+    db.add(dummy_neuron, exclude_keys={"activation", "output_neuron"}, run_id=0, epoch=0, sample_id=0)
     # db.execute("CREATE INDEX idx_model_epoch_sample ON Neuron (model, epoch, sample);")
-    db.execute("CREATE INDEX idx_epoch_sample ON Neuron (run_id, epoch, sample);")
-    db.execute("CREATE INDEX idx__RecordSample ON RecordSample (run_id,  sample);")
+    db.execute("CREATE INDEX idx_epoch_sample ON Neuron (run_id, epoch, sample_id);")
+    db.execute("CREATE INDEX idx__RecordSample ON RecordSample (run_id,  sample_id);")
 
 
 

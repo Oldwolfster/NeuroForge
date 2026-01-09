@@ -1,3 +1,146 @@
+Plan.
+#####################################################################################
+Step 1: Optional State Initializer Function #########################################
+#####################################################################################
+
+Your thinking: Add 3rd function initialize_state_fn to create m/v/t on neuron.
+My pushback: This still has the tendril — optimizer reaches INTO Neuron to mutate it. And it's another function to write/maintain.
+Alternative — Declarative State:
+pythonOptimizer_Adam = StrategyOptimizer(
+    ...
+    state_per_weight = ["m", "v"],      # System creates neuron.m[], neuron.v[]
+    state_per_neuron = ["t"],           # System creates neuron.t = 0
+)
+Optimizer DECLARES what it needs. System PROVIDES it. Optimizer author doesn't write initialization code — just lists names.
+
+#####################################################################################
+STEP 2 Kill the Operators Arrays#####################################################
+#####################################################################################
+
+#####################################################################################
+STEP 3 Add formula to strategy#######################################################
+#####################################################################################
+Optimizer_Adam = StrategyOptimizer(
+    name="Adam",
+    formula="adjustment = lr × m̂ / (√v̂ + ε)",  # This prints near backprop
+    ...
+)
+Concern.... wish i could use those fancy fonts... can i fix that?
+
+#####################################################################################
+STEP 4 Merge functions   ############################################################
+#####################################################################################
+we can take a lesson from Guido's failings (like pushing onus of circular includes on programmers instead of language).
+The merged function can be batch agnostic, simple calculate and return...
+then the framework manage if it does anything or not... 
+while it may be a 'little' bit of extra work done, it's fast work.... not sending network packets or writing to db.
+def adam_compute(neuron, weight_id, avg_blame, lr):
+```python
+    # Math happens ONCE
+    neuron.t += 1
+    neuron.m[weight_id] = beta1 * neuron.m[weight_id] + (1 - beta1) * avg_blame
+    neuron.v[weight_id] = beta2 * neuron.v[weight_id] + (1 - beta2) * (avg_blame ** 2)
+    m_hat = neuron.m[weight_id] / (1 - beta1 ** neuron.t)
+    v_hat = neuron.v[weight_id] / (1 - beta2 ** neuron.t)
+    scaled_lr = lr / (v_hat ** 0.5 + epsilon)
+    adjustment = scaled_lr * m_hat
+    
+    # Return BOTH — computed together, impossible to mismatch
+    return adjustment, [neuron.m[weight_id], neuron.v[weight_id], neuron.t, m_hat, v_hat, scaled_lr]
+```
+
+#####################################################################################
+STEP 5 Header Goat Rodeo#############################################################
+#####################################################################################
+# System constants (not per-optimizer)
+UNIVERSAL_UPDATE_COLUMNS = ["Input", "Blame", "Leverage"]
+UNIVERSAL_BATCH_COLUMNS = ["Cum", "BatchTot", "Count", "Avg"]  # Added when batch_size > 1
+UNIVERSAL_FINAL_COLUMNS = ["Learning Rate","Adj", "Before", "After"]
+
+# Optimizer declares ONLY its stuff
+Optimizer_Adam = StrategyOptimizer(
+    
+    audit_columns = ["m", "v", "t", "m_hat", "v_hat", "Scaled LR"]
+)
+
+UPDATE table:  UNIVERSAL_UPDATE + (UNIVERSAL_BATCH if batching) + audit_columns
+FINALIZE table: UNIVERSAL_BATCH (if batching) + audit_columns + UNIVERSAL_FINAL
+
+#####################################################################################
+STEP 6 Schema Goat Rodeo#############################################################
+#####################################################################################
+Continue with the 12 generic fields BUT stop creating multiple tables for each run_id.
+add run_id as key to
+WeightAdjustments_finalize
+WeightAdjustments_update
+
+#####################################################################################
+STEP 7 Provide Standard 'Timestep' aka number of times we reach batchsize NOT weights or Neurons
+#####################################################################################
+
+
+
+STEP 8 Validate these ADAM columns
+avg_leverage (the exact𝑔𝑡gt	​
+ Adam saw, per weight)
+beta1, beta2, epsilon, base lr
+m, v (after update)
+t (shared step counter)
+bias-correction denominators: (1 - beta1^t), (1 - beta2^t) (optional but nice)
+m_hat, v_hat
+scaled_lr = lr / (sqrt(v_hat) + eps)
+adjustment = scaled_lr * m_hat
+weight before/after
+
+
+#####################################################################################
+GOAL - SIMPLER OPTIMIZER IMPLEMENTATION #############################################
+#####################################################################################
+Optimizer_SGD = StrategyOptimizer(
+    name="SGD",
+    desc="adjustment = lr × blame",
+    compute_fn=lambda n, w, b, lr: lr * b,
+    audit_columns=["LR"],
+)
+
+Optimizer_Adam = StrategyOptimizer(
+    name="Adam", 
+    desc="adjustment = lr × m̂ / (√v̂ + ε)",
+    state_per_weight=["m", "v"],
+    state_per_neuron=["t"],
+    compute_fn=adam_compute,  # Returns (adjustment, audit_values)
+    audit_columns=["m", "v", "t", "m_hat", "v_hat", "Scaled LR"],
+)
+
+To add a new optimizer, author provides:
+name — display name
+desc — explanation for point-and-click UI
+formula — math shown in popup
+when_to_use / best_for — guidance text
+state_per_weight — array names needed (optional)
+state_per_neuron — scalar names needed (optional)
+compute_fn — returns (adjustment, audit_values)
+audit_columns — headers for audit_values
+
+UPDATE:
+Key Deviations from Original Plan:
+What we SKIPPED (for now, to bootstrap):
+
+State initialization (Step 1) - Didn't add state_per_weight/state_per_neuron declarations. SGD doesn't need state, so we're bootstrapping without it.
+Formula field (Step 3) - Didn't add the human-readable formula string. Coming later.
+Universal column definitions (Step 5) - Didn't define UNIVERSAL_UPDATE_COLUMNS separately. We're just assembling complete records.
+
+What we did DIFFERENTLY:
+
+More aggressive simplification - Instead of "universal columns + optimizer columns", we went straight to: optimizer assembles COMPLETE display record, stores it exactly as it will render. No JOIN gymnastics on VCR side.
+Brain returns ALL display values - Your original plan had brain return (adjustment, audit_values) where audit_values were optimizer-specific. We expanded it to return ALL 7 columns (Input, Blame, Leverage, LR, Adjustment, Before, After). Framework doesn't assemble anything - brain does it all.
+Added buffering - Not in original plan, but Knuth insisted. 5000-row batching to avoid INSERT spam.
+Generic dictionary write - Made write_weight_update() completely generic for any flat dict, with add_standard_fields() extension point.
+
+
+
+
+
 # NeuroForge Optimizer Architecture
 ## Complete Technical Documentation - "Every Detail Exposed"
 
@@ -22,7 +165,7 @@ NeuroForge operates as two interconnected systems:
 │  │  (State)    │    │  (Capture)  │                                    │
 │  └─────────────┘    └─────────────┘                                    │
 │         │                  │                                           │
-└─────────│──────────────────│───────────────────────────────────────────┘
+└─────────│────────────────6──│───────────────────────────────────────────┘
           │                  │
           │                  v
           │         ┌───────────────┐
@@ -59,7 +202,7 @@ optimizers have **tentacles** reaching into multiple system components:
 
 | Component          | What Optimizer Touches                                      |
 |--------------------|-------------------------------------------------------------|
-| **Neuron**         | State arrays: `m[]`, `v[]`, `t`, `accumulated_accepted_blame[]`, `learning_rates[]` |
+| **Neuron**         | State arrays: `m[]`, `v[]`, `t`, `accumulated_leverage[]`, `learning_rates[]` |
 | **VCRRecorder**    | `record_weight_updates()` with variable-length rows         |
 | **DB Schema**      | `WeightAdjustments_update_*`, `WeightAdjustments_finalize_*` with `arg_1..arg_N` |
 | **Popup Rendering**| Header arrays determine column count and labels             |
@@ -164,7 +307,7 @@ Optimizer_Adam = StrategyOptimizer(
 │  │         ┌────────────────────────────────────────────────────────┐   │   │
 │  │         │ for each weight_id, input_x:                           │   │   │
 │  │         │   raw_adjustment = input_x * accepted_blame            │   │   │
-│  │         │   neuron.accumulated_accepted_blame[weight_id] += raw  │   │   │
+│  │         │   neuron.accumulated_leverage[weight_id] += raw  │   │   │
 │  │         │   log: [weight_id, input_x, blame, raw_adj, (cum)?]    │   │   │
 │  │         └────────────────────────────────────────────────────────┘   │   │
 │  │                                                                       │   │
@@ -192,7 +335,7 @@ Optimizer_Adam = StrategyOptimizer(
 │  │                                                                       │   │
 │  │  for each layer, for each neuron, for each weight_id:                │   │
 │  │    ┌────────────────────────────────────────────────────────────┐    │   │
-│  │    │ blame_total = neuron.accumulated_accepted_blame[weight_id] │    │   │
+│  │    │ blame_total = neuron.accumulated_leverage[weight_id] │    │   │
 │  │    │ avg_blame = blame_total / batch_size                       │    │   │
 │  │    │ lr = neuron.learning_rates[weight_id]                      │    │   │
 │  │    │                                                            │    │   │
@@ -206,7 +349,7 @@ Optimizer_Adam = StrategyOptimizer(
 │  │    │ log: [nid, wt_id, (batch_tot, count, avg)?, ...state]     │    │   │
 │  │    └────────────────────────────────────────────────────────────┘    │   │
 │  │                                                                       │   │
-│  │  Reset: neuron.accumulated_accepted_blame = [0.0] * len(...)         │   │
+│  │  Reset: neuron.accumulated_leverage = [0.0] * len(...)         │   │
 │  └───────────────────────────────────────────────────────────────────────┘   │
 │                          │                                                   │
 │                          v                                                   │
@@ -336,7 +479,7 @@ arg_fields = [f"arg_{i+1}" for i in range(num_args)]  # Dynamically build SELECT
 ```python
 # In Neuron.__init__():
 self.learning_rates = [learning_rate] * len(self.weights)
-self.accumulated_accepted_blame = [0.0] * len(self.weights)
+self.accumulated_leverage = [0.0] * len(self.weights)
 ```
 
 ### 6.3 ⚠️ CURRENT GAP: Optimizer State Initialization
@@ -448,7 +591,7 @@ For an optimizer to be fully integrated:
    - Which of `m[]`, `v[]`, `t` does this optimizer need?
 
 5. **The system handles**:
-   - Blame accumulation (`accumulated_accepted_blame`)
+   - Blame accumulation (`accumulated_leverage`)
    - Batch averaging
    - DB logging with dynamic column count
    - Popup rendering with dynamic headers

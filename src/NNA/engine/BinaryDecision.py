@@ -11,10 +11,8 @@ class BinaryDecision:
             self.label_max = training_data.target_labels[1]  # e.g., "Paid It!"
             self.threshold = (self.target_min + self.target_max) / 2
 
-
-        if self.is_active:
-            print(f"BD initialized: target_min={self.target_min}, target_max={self.target_max}")
-            print(f"BD labels: label_min={self.label_min}, label_max={self.label_max}")
+            #print(f"BD initialized: target_min={self.target_min}, target_max={self.target_max}")
+            #print(f"BD labels: label_min={self.label_min}, label_max={self.label_max}")
 
     def decide(self, prediction_unscaled)-> tuple[float, str | None]:
         if not self.is_active:                      return prediction_unscaled, None  # Consistent tuple, label is None for regression

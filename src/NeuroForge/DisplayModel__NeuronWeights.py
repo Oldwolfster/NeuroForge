@@ -111,14 +111,6 @@ class DisplayModel__NeuronWeights:
 
         return bar_height
 
-    def calculate_weighted_sum(self):
-        """
-        Calculates the weighted sum that is displayed in bottom right and fed to activation function.
-        """
-        return sum(
-            weight * input_value
-            for weight, input_value in zip(self.neuron.weights_before, [1] + self.neuron.neuron_inputs)
-        )
 
 
     def will_computation_line_fit(self, left_text, right_text, font, available_width):
@@ -143,7 +135,7 @@ class DisplayModel__NeuronWeights:
         if self.neuron.am_really_short:
             return
 
-        weighted_sum = self.calculate_weighted_sum()
+        weighted_sum = self.neuron.raw_sum
         activation_fn = self.neuron.activation_function if self.neuron.activation_function else "f"
         output_value = self.neuron.activation_value
 
@@ -185,18 +177,18 @@ class DisplayModel__NeuronWeights:
 
 
 
-        def get_max_error_signal_for_iteration(self):
+        def get_max_accepted_blame_for_iteration(self):
             """
-            Get max absolute error_signal for CURRENT sample (sample mode)
+            Get max absolute accepted_blame for CURRENT sample (sample mode)
             or max of epoch-averaged blames (epoch mode).
             """
             run_id = Const.TRIs[0].run_id
 
             if Const.vcr.blame_mode == "epoch":
                 SQL = """
-                    SELECT MAX(avg_abs_blame) AS max_error_signal
+                    SELECT MAX(avg_abs_blame) AS max_accepted_blame
                     FROM (
-                        SELECT AVG(ABS(error_signal)) AS avg_abs_blame
+                        SELECT AVG(ABS(accepted_blame)) AS avg_abs_blame
                         FROM Neuron 
                         WHERE run_id = ? AND epoch = ?
                         GROUP BY nid
@@ -205,12 +197,12 @@ class DisplayModel__NeuronWeights:
                 result = self.db.query(SQL, (run_id, Const.vcr.CUR_EPOCH))
             else:
                 SQL = """
-                    SELECT MAX(ABS(error_signal)) AS max_error_signal
+                    SELECT MAX(ABS(accepted_blame)) AS max_accepted_blame
                     FROM Neuron WHERE run_id = ? AND epoch = ? AND sample = ? 
                 """
                 result = self.db.query(SQL, (run_id, Const.vcr.CUR_EPOCH, Const.vcr.CUR_SAMPLE))
 
-            self.max_blame = result[0]['max_error_signal'] if result and result[0]['max_error_signal'] is not None else 1.0
+            self.max_blame = result[0]['max_accepted_blame'] if result and result[0]['max_accepted_blame'] is not None else 1.0
             if not hasattr(self, 'historical_max_blame'):
                 self.historical_max_blame = self.max_blame
             else:

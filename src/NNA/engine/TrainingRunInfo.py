@@ -1,7 +1,7 @@
 from enum import Enum
 
 from src.ArenaSettings import HyperParameters
-from src.NNA.engine import RamDB
+from src.NNA.utils import RamDB
 from datetime import datetime
 
 from src.NNA.engine.BinaryDecision import BinaryDecision
@@ -18,7 +18,7 @@ class RecordLevel(Enum):
 class TrainingRunInfo:
     def __init__(self, hyper: HyperParameters, training_data: TrainingData, setup: dict, record_level: RecordLevel, run_id: int):
         self.record_level:      RecordLevel         = record_level
-        self.db:                RamDB               = hyper.db_ram
+        self.db: RamDB = hyper.db_ram
         self.training_data:     TrainingData        = training_data
         self.hyper:             HyperParameters     = hyper
         self.config:            Config              = Config(self)
@@ -60,14 +60,13 @@ class TrainingRunInfo:
 
     @property
     def accuracy_bd(self) -> float:
-        #print("accuracy_bd")
         bd_correct = self.bd_correct
         samples = self.training_data.sample_count
         return (bd_correct / samples ) * 100
 
     @property
     def accuracy(self) -> float:
-        if self.training_data.problem_type == "Binary Decision":
+        if self.training_data.is_binary_decision:
             return self.accuracy_bd
         else:
             return self.accuracy_regression

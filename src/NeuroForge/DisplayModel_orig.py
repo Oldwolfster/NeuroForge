@@ -234,7 +234,7 @@ class DisplayModel(EZSurface):
 
         SQL_MAX_blame = """
                              SELECT MAX(abs_blame) AS max_abs_blame
-                             FROM (SELECT ABS(error_signal) AS abs_blame \
+                             FROM (SELECT ABS(accepted_blame) AS abs_blame \
                                    FROM Neuron \
                                    WHERE run_id = ? \
                                    ORDER BY abs_blame ASC LIMIT (SELECT CAST(COUNT(*) * 0.95 AS INT) 

@@ -43,9 +43,9 @@ class Gladiator(ABC):
         self.training_data          = TRI.training_data         # Only needed for sqlMgr ==> self.ramDb = args[3]
 
         self.VCR                    = VCR(TRI)
-        self.sample                 = 0
+        self.sample_id              = 0
         self.epoch                  = 0
-        self.total_samples       = 1                         # Timestep for optimizers such as adam
+        self.total_samples          = 1                         # Timestep for optimizers such as adam
         self.blame_calculations     = []
         self.weight_calculations    = []
         self.configure_everything()
@@ -111,14 +111,11 @@ class Gladiator(ABC):
         """
         self.epoch = epoch  # Set so the child model has access
 
-        for self.sample, (sample, sample_unscaled) in enumerate(
-            zip(self.config.scaler.scaled_samples, self.config.scaler.unscaled_samples)
-        ):
-            if (self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion" or
-                    self.VCR.abs_error_for_epoch > 1e21):
+        for self.sample_id, (sample, sample_unscaled) in enumerate(zip(self.config.scaler.scaled_samples, self.config.scaler.unscaled_samples), start=1        ):
+            if (self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion" or self.VCR.abs_error_for_epoch > 1e21):
                 self.VCR.finish_epoch(epoch )
                 return "Gradient Explosion"
-        return self.VCR.finish_epoch(epoch )  # Finish epoch and return convergence signal
+        return self.VCR.finish_epoch(epoch)  # Finish epoch and return convergence signal
 
     def run_a_sample(self, sample, sample_unscaled):
         snapshot_weights("", "_before")
@@ -135,7 +132,7 @@ class Gladiator(ABC):
         sample_results = RecordSample(
             run_id              = self.TRI.run_id,
             epoch               = self.epoch,
-            sample           = self.sample,
+            sample_id           = self.sample_id,
             inputs              = dumps(sample[:-1]),
             inputs_unscaled     = dumps(sample_unscaled[:-1]),
             is_true             = is_true,
@@ -166,7 +163,7 @@ class Gladiator(ABC):
             return "Gradient Explosion", None, None
 
         self.VCR.record_blame_calculations(self.blame_calculations)
-        self.VCR.record_weight_updates(self.weight_calculations, "update")
+        #self.VCR.record_weight_updates(self.weight_calculations, "update")
         return error_scaled, loss, loss_gradient
 
     def has_gradient_explosion(self):
@@ -174,7 +171,7 @@ class Gladiator(ABC):
         import math
         for layer in Neuron.layers:
             for neuron in layer:
-                for val in [neuron.error_signal, neuron.activation_value] + neuron.weights:
+                for val in [neuron.accepted_blame, neuron.activation_value] + neuron.weights:
                     if val is None:                        continue
                     if math.isnan(val) or math.isinf(val) or abs(val) > 1e21:   return True
         return False
@@ -216,44 +213,82 @@ class Gladiator(ABC):
     def back_pass__determine_blame_for_output_neuron(self, loss_gradient: float):
         activation_gradient               = Neuron.output_neuron.activation_gradient
         blame                             = loss_gradient * activation_gradient
-        Neuron.output_neuron.error_signal = blame
-
-    # BaseGladiator.py
+        Neuron.output_neuron.accepted_blame = blame
 
     def back_pass__determine_blame_for_a_hidden_neuron(self, neuron: Neuron):
         total_backprop_error = 0
         for next_neuron in Neuron.layers[neuron.layer_id + 1]:
             weight_to_next = next_neuron.weights_before[neuron.position + 1]  # +1 to skip bias
-            error_from_next = next_neuron.error_signal
+            error_from_next = next_neuron.accepted_blame
             total_backprop_error += weight_to_next * error_from_next
             self.blame_calculations.append([
-                self.epoch, self.sample, self.TRI.run_id,
+                self.epoch, self.sample_id, self.TRI.run_id,
                 neuron.nid, next_neuron.position,
                 weight_to_next, "*", error_from_next,
                 "=", None, None,
                 weight_to_next * error_from_next
             ])
-        neuron.error_signal = neuron.activation_gradient * total_backprop_error
+        neuron.accepted_blame = neuron.activation_gradient * total_backprop_error
 
     def back_pass__spread_the_blame(self, training_sample: list[float]):
+        """Loops through Layers (right to left) then each neuron in Layer
+           FOR A NEURON abstracts INPUT from 1) other neurons vs 2) sample inputs.
+           Passes to back_pass__blame_per_neuron
+        """
         for layer_index in range(len(Neuron.layers) - 1, -1, -1):
             prev_layer = (
                 training_sample[:-1] if layer_index == 0
                 else [n.activation_value for n in Neuron.layers[layer_index - 1]]
             )
             for neuron in Neuron.layers[layer_index]:
-                self.back_pass__update_neurons_weights(neuron, prev_layer)
+                self.back_pass__accumulate_blame_per_neuron(neuron, prev_layer)
 
-    def back_pass__update_neurons_weights(self, neuron: Neuron, prev_layer_values: list[float]) -> None:
-        blame = neuron.error_signal
+    def back_pass__accumulate_blame_per_neuron(self, neuron: Neuron, prev_layer_values: list[float]) -> None:
+        blame = neuron.accepted_blame
+        input_vector = [1.0] + list(prev_layer_values)
+
+        if len(input_vector) != len(neuron.weights):
+            raise ValueError(
+                f"Input vector length ({len(input_vector)}) must match weights length ({len(neuron.weights)}). "
+                f"(Did you forget the bias input or include an extra input?)"
+            )
+
+        # Ensure accumulator exists and is correctly sized (generic, optimizer-agnostic)
+        if (not hasattr(neuron, "accumulated_leverage")
+                or neuron.accumulated_leverage is None
+                or len(neuron.accumulated_leverage) != len(neuron.weights)):
+            neuron.accumulated_leverage = [0.0] * len(neuron.weights)
+
+        # Accumulate "blame spread" per weight (leverage), then (for now) apply immediately (batch_size=1 behavior)
+        for weight_id, input_value in enumerate(input_vector):
+            leverage = input_value * blame
+            neuron.accumulated_leverage[weight_id] += leverage
+
+
+    def back_pass__accumulate_blame_per_neuronOld(self, neuron: Neuron, prev_layer_values: list[float]) -> None:
+        blame = neuron.accepted_blame
+        input_vector = [1.0] + list(prev_layer_values)
+        self.config.optimizer.update(
+            neuron, input_vector, blame, self.total_samples,
+            config=self.config,
+            epoch=self.epoch,  # Already 1-indexed
+            sample=self.sample_id,  # Renamed from sample
+            batch_id=self.VCR.batch_id
+        )
+
+        self.total_samples += len(input_vector)  # TODO THIS IS WRONG
+
+    def back_pass__blame_per_neuronOLD(self, neuron: Neuron, prev_layer_values: list[float]) -> None:
+        blame = neuron.accepted_blame
         input_vector = [1.0] + list(prev_layer_values)
         self.weight_calculations.extend(
             self.config.optimizer.update(
                 neuron, input_vector, blame, self.total_samples,
                 config=self.config,
                 epoch=self.epoch,  # Already 1-indexed
-                sample=self.sample,  # Renamed from sample
+                sample=self.sample_id,  # Renamed from sample
                 batch_id=self.VCR.batch_id
             )
         )
-        self.total_samples += len(input_vector)
+        self.total_samples += len(input_vector)  #TODO THIS IS WRONG
+

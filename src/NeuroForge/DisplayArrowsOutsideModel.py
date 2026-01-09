@@ -35,16 +35,15 @@ class DisplayArrowsOutsideNeuron:
 
         visualizer = scaler.neuron_visualizer
         x_offset = Const.SCREEN_WIDTH * self.INPUT_ARROW_X_OFFSET
-        y_offset = Const.SCREEN_HEIGHT * self.INPUT_ARROW_Y_OFFSET
+        #y_offset = Const.SCREEN_HEIGHT * self.INPUT_ARROW_Y_OFFSET
 
         for i, (start_x, start_y) in enumerate(input_panel.label_y_positions):
             if i >= len(visualizer.my_fcking_labels):
                 break
             end_x = self.model.left + visualizer.my_fcking_labels[i][0]
-            end_y = self.model.top + visualizer.my_fcking_labels[i][1] + y_offset
+            end_y = self.model.top + visualizer.my_fcking_labels[i][1] #+ y_offset
             self.arrows.append(DisplayArrow(start_x - x_offset, start_y, end_x, end_y, screen=Const.SCREEN))
 
-    # DisplayArrowsOutsideNeuron.py
 
     def build_output_arrows(self):
         """Prediction Scaler → Error panel + gradient stub back"""
@@ -63,7 +62,7 @@ class DisplayArrowsOutsideNeuron:
         start_x = self.model.left + visualizer.label_y_positions[2][0]
         start_y = self.model.top + visualizer.label_y_positions[2][1]
         end_x = prediction_panel.left  # LEFT edge of panel
-        end_y = prediction_panel.label_y_positions[0][1]  # Y from field position
+        end_y = prediction_panel.label_y_positions[0][1]+9.6  # Y from field position
 
         self.arrows.append(DisplayArrow(
             start_x, start_y, end_x, end_y - y_offset,

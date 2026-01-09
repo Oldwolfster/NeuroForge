@@ -25,12 +25,12 @@ class AutoForge_TEMPLATE(Gladiator):
 
         config.architecture            = [3,2,1]
         config.optimizer                = Optimizer_SGD
-        config.learning_rate           = 0.01
-        config.weight_initializer      = Initializer_He
+        #config.learning_rate           = 0.01
+        #config.weight_initializer      = Initializer_He
         #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_NoDamnFunction
         #config.loss_function           = Loss_HalfWit
-        #config.batch_size              = 1
+        config.batch_size              = 2
         #config.roi_mode                = ROI_Mode.MOST_ACCURATE    #SWEET_SPOT(Default), ECONOMIC or MOST_ACCURATE
         #config.input_scalers           = Scaler_NONE                                 # All inputs same scaler
         #config.input_scalers           = [Scaler_MinMax, Scaler_MinMax, Scaler_MinMax, Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax, Scaler_Robust]

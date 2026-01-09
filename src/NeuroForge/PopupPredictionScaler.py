@@ -30,7 +30,7 @@ class PopupPredictionScaler(Popup_Base):
     def content_to_display(self) -> List[List[str]]:
         """Build columns showing prediction and target values with scaler info."""
 
-        rs                  = Const.dm.get_model_iteration_data(self.model.run_id)  # Get current iteration data
+        rs                  = Const.dm.get_sample_data(self.model.run_id)  # Get current iteration data
         prediction_raw      = rs.get("prediction_raw", "[]")  # Get prediction values (scaled and unscaled)
         prediction_unscaled = rs.get("prediction_unscaled", "[]")
         target_raw          = rs.get("target", "[]")     # Get target values (scaled and unscaled)

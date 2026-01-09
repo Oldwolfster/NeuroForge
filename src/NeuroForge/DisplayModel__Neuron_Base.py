@@ -93,8 +93,6 @@ class DisplayModel__Neuron_Base:
             self.banner_text = self.label
             if self.text_version == "Verbose":
                 self.banner_text = f"Hidden Neuron {self.label}"
-        print (f"yo - {self.banner_text} nid={nid}")
-        #self.neuron_build_text = self.neuron_build_text_large if text_version == "Verbose" else self.neuron_build_text_small
 
         # Calculate and store banner text width for blame bar calculations
         self.calculate_banner_text_width()
@@ -230,11 +228,11 @@ class DisplayModel__Neuron_Base:
             SELECT  *
             FROM    RecordSample I
             JOIN    Neuron N
-            ON      I.run_id  = N.run_id 
+            ON      I.run_id    = N.run_id 
             AND     I.epoch     = N.epoch
-            AND     I.sample = N.sample
-            WHERE   N.run_id = ? AND N.sample = ? AND N.epoch = ? AND nid = ?
-            ORDER BY epoch, sample, N.run_id, nid 
+            AND     I.sample_id = N.sample_id
+            WHERE   N.run_id    = ? AND N.sample_id = ? AND N.epoch = ? AND nid = ?
+            ORDER   BY epoch,     sample_id, N.run_id, nid 
         """
         rs = self.db.query(SQL, (self.run_id, Const.vcr.CUR_SAMPLE, self.model.display_epoch, self.nid)) # Execute query
         # ✅ Check if `rs` is empty before accessing `rs[0]`
@@ -245,8 +243,9 @@ class DisplayModel__Neuron_Base:
         self.neuron_inputs = json.loads( rs[0].get("neuron_inputs"))
 
         # Activation function details
+        self.raw_sum                = rs[0].get('raw_sum', 0.0)
         self.activation_value       = rs[0].get('activation_value', None)        #THE OUTPUT
-        self.blame                  = rs[0].get('error_signal', 'Unknown')  # Accepted blame
+        self.blame                  = rs[0].get('accepted_blame', 'Unknown')  # Accepted blame
         self.activation_gradient    = rs[0].get('activation_gradient', None)  # From neuron
 
         lr_json = rs[0].get('learning_rates', '[]') # Extract learning rates (stored as JSON in database)
@@ -255,7 +254,7 @@ class DisplayModel__Neuron_Base:
 
     def update_avg_error(self):
         SQL = """
-        SELECT AVG(ABS(error_signal)) AS avg_error_signal            
+        SELECT AVG(ABS(accepted_blame)) AS avg_accepted_blame            
         FROM Neuron
         WHERE 
         run_id   = ? and
@@ -271,7 +270,7 @@ class DisplayModel__Neuron_Base:
             return False  # No results found
 
         # ✅ Ensure `None` does not cause an error
-        self.avg_err_sig_for_epoch = float(rs[0].get("avg_error_signal") or 0.0)
+        self.avg_err_sig_for_epoch = float(rs[0].get("avg_accepted_blame") or 0.0)
         #print("in update_avg_error returning TRUE")
         return True
     def update_weights(self):
@@ -569,38 +568,42 @@ class DisplayModel__Neuron_Base:
                 columns[2*i+1].append(operators[i])
 
         return columns
+
+    # DisplayModel__Neuron_Base.py
+
     def tooltip_columns_for_backprop(self):
-        """Compose the final list-of-lists depending on single vs batch mode."""
-        is_batch = self.config.batch_size > 1
+        """Single method replaces update + finalize + standard_finale"""
 
-        # 1) Update block (always present)
-        update_cols = self.tooltip_columns_for_backprop_update(is_batch)
+        sql = """
+            SELECT *
+            FROM WeightAdjustments
+            WHERE run_id = ?
+              AND epoch = ?
+              AND sample_num = ?
+              AND nid = ?
+            ORDER BY weight_id ASC
+        """
+        params = (self.run_id, self.model.display_epoch, Const.vcr.CUR_SAMPLE, self.nid)
+        rows = Const.dm.db.query(sql, params, as_dict=True)
 
-        # 2) In batch mode, include the 'joined' finalize block # NEW - always try to show finalizer columns
-        batch_finalize_cols = self.tooltip_columns_for_backprop_finalize(is_batch)
-        std_finalize_cols = self.tooltip_columns_for_backprop_standard_finale()
-        cols = update_cols + batch_finalize_cols + std_finalize_cols
-        # 3) Finally inject your error signal section
-        return self.tooltip_columns_for_error_signal_calculation(cols)
+        if not rows:
+            return []
 
-    def ORIGtooltip_columns_for_backprop(self):
-        """Compose the final list-of-lists depending on single vs batch mode."""
-        is_batch = self.config.batch_size > 1
+        # Get column names from optimizer (or from first row)
+        # Exclude the key fields - just show the interesting data
+        skip_cols = {"run_id", "epoch", "sample_num", "nid", "weight_id"}
+        display_cols = [k for k in rows[0].keys() if k not in skip_cols]
 
-        # 1) Update block (always present)
-        update_cols = self.tooltip_columns_for_backprop_update(is_batch)
+        # Build column lists: header + one value per weight
+        result = []
+        for col_name in display_cols:
+            column = [col_name]  # Header
+            for row in rows:
+                column.append(self.smart_format_for_popup(row[col_name]))
+            result.append(column)
 
-        # 2) In batch mode, include the 'joined' finalize block
-        if is_batch:
-            batch_finalize_cols = self.tooltip_columns_for_backprop_finalize(is_batch)
-            std_finalize_cols  = self.tooltip_columns_for_backprop_standard_finale()
-            cols = update_cols + batch_finalize_cols + std_finalize_cols
-        else:
-            # single‐sample: skip the joined finalize block entirely
-            cols = update_cols + self.tooltip_columns_for_backprop_standard_finale()
+        return result
 
-        # 3) Finally inject your error signal section
-        return self.tooltip_columns_for_error_signal_calculation(cols)
 
     def tooltip_columns_for_backprop_update(self, is_batch: bool):
         # pick the right header/operator lists
@@ -698,7 +701,7 @@ class DisplayModel__Neuron_Base:
         return [col_delta, col_before, col_after]
 
 
-    def tooltip_columns_for_error_signal_calculation(self, all_cols):
+    def tooltip_columns_for_accepted_blame_calculation(self, all_cols):
         # Row in the box between adj and blame
         #print(f"len(all_cols)={len(all_cols)}")  #Prints blank row, empty space in each cell
         for i in range(8):  #Do entire row

@@ -69,7 +69,16 @@ class DisplayModel(EZSurface):
         GeneratorNeuron.create_neurons(self, max_activation)
         self.graph = self.create_graph(self.graph_holder)  # Add Graph  # MAE over epoch
 
-        if self.thresholder:            self.hoverlings.append(self.thresholder)
+        if self.thresholder:              Const.dm.hoverlings.append(self.input_scaler_neuron)
+        if self.input_scaler_neuron:      Const.dm.hoverlings.append(self.input_scaler_neuron)
+        if self.prediction_scaler_neuron: Const.dm.hoverlings.append(self.prediction_scaler_neuron)
+
+        #if self.input_scaler_neuron:      self.hoverlings.append(self.input_scaler_neuron)
+        #if self.prediction_scaler_neuron: self.hoverlings.append(self.prediction_scaler_neuron)
+
+
+
+
 
         Const.dm.eventors.append(self.graph)
         # Register neurons as hoverlings
@@ -77,14 +86,6 @@ class DisplayModel(EZSurface):
             for neuron in layer:
                 neuron.model = self
                 # handled in layerself.hoverlings.append(neuron)
-
-            print(f"Model {self.run_id} hoverlings count: {len(self.hoverlings)}")
-            print(f"graph_holder: {self.graph_holder}")
-            print(f"Is graph_holder in model hoverlings? {self.graph_holder in self.hoverlings}")
-            print(f"Is graph_holder in Const.dm.hoverable_neurons? {self.graph_holder in Const.dm.hoverable_neurons}")
-            print(f"Graph object: {self.graph}")
-            # Also check Display_Manager's global hoverlings
-            print(f"Is graph_holder in Const.dm.hoverlings? {self.graph_holder in Const.dm.hoverlings}")
 
     def create_output_to_prediction_scaler_arrow(self):
         # Arrow: output neuron → prediction scaler (always needed, even without thresholder)
@@ -115,7 +116,7 @@ class DisplayModel(EZSurface):
 
         # Arrow: prediction scaler → thresholder diamond (left side)
         # Coordinates are already in local model space - don't add self.left/self.top
-        start_x, start_y = self.prediction_scaler_neuron.neuron_visualizer.label_y_positions[0]
+        start_x, start_y = self.prediction_scaler_neuron.neuron_visualizer.label_y_positions[1]
         end_x, end_y = self.thresholder.neuron_visualizer.diamond_left
 
         DisplayArrow(start_x, start_y, end_x, end_y, screen=self.surface, arrow_size=16, thickness=2).draw()
@@ -184,13 +185,6 @@ class DisplayModel(EZSurface):
         for button in self.buttons:            button.draw_me()
         self.render_internal_arrows()
         self.render_scaler_to_hidden_arrows()
-        print(f"Model {self.run_id} hoverlings count: {len(self.hoverlings)}")
-        print(f"graph_holder: {self.graph_holder}")
-        print(f"Is graph_holder in THIS model's hoverlings? {self.graph_holder in self.hoverlings}")
-        print(f"Graph holder's global rect: {self.graph_holder.get_global_rect()}")
-
-        # Also check Display_Manager's global hoverlings
-        print(f"Is graph_holder in Const.dm.hoverlings? {self.graph_holder in Const.dm.hoverlings}")
 
 
     def render_internal_arrows(self):

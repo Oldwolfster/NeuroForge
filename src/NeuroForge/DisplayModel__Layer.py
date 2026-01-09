@@ -165,8 +165,6 @@ class DisplayModel__Layer:
             print(f"Layer {self.layer_index}: buttons already exist, skipping")
             return
 
-        print(f"Layer {self.layer_index}: creating control buttons at model.top={self.model.top}")
-
         screen = Const.SCREEN
         screen_width, screen_height = screen.get_size()
 

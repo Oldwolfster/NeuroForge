@@ -4,7 +4,7 @@ from dataclasses import dataclass
 class RecordSample:
     run_id: int
     epoch: int
-    sample: int
+    sample_id: int
     inputs: str  # Serialized as JSON
     inputs_unscaled: str  # Serialized as JSON
     is_true: int # from BinaryDecision class

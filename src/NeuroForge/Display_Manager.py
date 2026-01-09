@@ -3,7 +3,7 @@ import pygame
 from itertools import chain
 from src.NeuroForge import Const
 from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
-from src.NNA.engine.RamDB import RamDB
+from src.NNA.utils.RamDB import RamDB
 from src.NeuroForge.ButtonBase import Button_Base
 from src.NeuroForge.DisplayBanner import DisplayBanner
 from src.NeuroForge.DisplayPanelCtrl import DisplayPanelCtrl
@@ -64,7 +64,7 @@ class Display_Manager:
         self.query_max_values()
         self.query_data_sample()
         self.query_data_epoch()
-        self.get_max_error_signal_for_iteration()
+        self.get_max_accepted_blame_for_iteration()
         self.initialize_components()
 
     def process_events(self, event):
@@ -88,25 +88,25 @@ class Display_Manager:
     def populate_recorded_frames(self):
         """Load list of all recorded epoch/sample combinations for VCR playback."""
         sql = """
-            SELECT epoch, sample 
+            SELECT epoch, sample_id 
             FROM RecordSample 
-            GROUP BY epoch, sample 
-            ORDER BY epoch, sample
+            GROUP BY epoch, sample_id 
+            ORDER BY epoch, sample_id
         """
         Const.vcr.recorded_frames = self.db.query(sql, as_dict=False)
 
-    def get_max_error_signal_for_iteration(self):
+    def get_max_accepted_blame_for_iteration(self):
         """
-        Get max absolute error_signal for CURRENT sample (sample mode)
+        Get max absolute accepted_blame for CURRENT sample (sample mode)
         or max of epoch-averaged blames (epoch mode).
         """
         run_id = Const.TRIs[0].run_id
 
         if Const.vcr.blame_mode == "epoch":
             SQL = """
-                SELECT MAX(avg_abs_blame) AS max_error_signal
+                SELECT MAX(avg_abs_blame) AS max_accepted_blame
                 FROM (
-                    SELECT AVG(ABS(error_signal)) AS avg_abs_blame
+                    SELECT AVG(ABS(accepted_blame)) AS avg_abs_blame
                     FROM Neuron 
                     WHERE run_id = ? AND epoch = ?
                     GROUP BY nid
@@ -115,12 +115,12 @@ class Display_Manager:
             result = self.db.query(SQL, (run_id, Const.vcr.CUR_EPOCH))
         else:
             SQL = """
-                SELECT MAX(ABS(error_signal)) AS max_error_signal
+                SELECT MAX(ABS(accepted_blame)) AS max_accepted_blame
                 FROM Neuron WHERE run_id = ? AND epoch = ? AND sample = ? 
             """
             result = self.db.query(SQL, (run_id, Const.vcr.CUR_EPOCH, Const.vcr.CUR_SAMPLE))
 
-        self.max_blame = result[0]['max_error_signal'] if result and result[0]['max_error_signal'] is not None else 1.0
+        self.max_blame = result[0]['max_accepted_blame'] if result and result[0]['max_accepted_blame'] is not None else 1.0
         if not hasattr(self, 'historical_max_blame'):
             self.historical_max_blame = self.max_blame
         else:
@@ -128,10 +128,10 @@ class Display_Manager:
 
     def query_max_values(self):
         """Query global max values for scaling displays."""
-        Const.MAX_EPOCH     = self.db.query_value("SELECT MAX(epoch) FROM RecordSample")
-        Const.MAX_SAMPLE    = self.db.query_value("SELECT MAX(sample) FROM RecordSample")
-        Const.MAX_WEIGHT    = self.db.query_value("SELECT MAX(ABS(value)) FROM Weight")
-        Const.MAX_ERROR     = self.db.query_value("SELECT MAX(ABS(error_signal)) FROM Neuron")
+        Const.MAX_EPOCH     = self.db.query_value("SELECT MAX(epoch)                FROM RecordSample")
+        Const.MAX_SAMPLE    = self.db.query_value("SELECT MAX(sample_id)            FROM RecordSample")
+        Const.MAX_WEIGHT    = self.db.query_value("SELECT MAX(ABS(value))           FROM Weight")
+        Const.MAX_ERROR     = self.db.query_value("SELECT MAX(ABS(accepted_blame))    FROM Neuron")
 
 
 
@@ -163,7 +163,7 @@ class Display_Manager:
                 WHERE epoch <= ?
                 GROUP BY run_id
             ) latest ON s.run_id = latest.run_id AND s.epoch = latest.latest_epoch
-            WHERE s.sample = ?
+            WHERE s.sample_id = ?
         """
         params = (Const.vcr.CUR_EPOCH, Const.vcr.CUR_SAMPLE)
         rs = self.db.query(sql, params)
@@ -185,7 +185,7 @@ class Display_Manager:
 
         self.query_data_sample()
         self.query_data_epoch()
-        self.get_max_error_signal_for_iteration()
+        self.get_max_accepted_blame_for_iteration()
 
         for component in self.components:           component.update_me()
 

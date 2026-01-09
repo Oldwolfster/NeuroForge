@@ -31,7 +31,7 @@ class PopupInputScaler(Popup_Base):
         """Build columns showing feature, scaler, params, unscaled, and scaled values."""
 
         # Get current iteration data
-        rs = Const.dm.get_model_iteration_data(self.model.run_id)
+        rs = Const.dm.get_sample_data(self.model.run_id)
 
         # Get unscaled inputs
         raw_inputs = rs.get("inputs_unscaled", "[]")

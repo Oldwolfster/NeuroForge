@@ -1,218 +1,167 @@
+# DisplayModel__NeuronScalerPrediction.py
+
 import pygame
-from src.NNA.engine.Utils import *
 from src.NNA.utils.general_text import smart_format
 from src.NeuroForge import Const
-import json
 
 
 class DisplayModel__NeuronScalerPrediction:
     """
+    Strategy for prediction scaler visualization.
 
+    Two modes:
+        Scaling active: Three-part pills like InputScaler (scaled | label | unscaled)
+        No scaling:     Label rows + value rows, right-aligned numbers, no pills
+
+    Owns layout; calls dispatcher primitives for drawing.
     """
 
-    def __init__(self, neuron, ez_printer):
-        # Configuration settings
-        self.banner_height              = 40
-        self.oval_height                = 19
-        self.oval_vertical_tweak        = 56.69
-        self.oval_overhang              = 0
-        # Neuron attributes
-        self.neuron                     = neuron  # ✅ Store reference to parent neuron
-        self.font                       = pygame.font.Font(None, Const.FONT_SIZE_WEIGHT)
-        self.font_small                 = pygame.font.Font(None, Const.FONT_SIZE_SMALL)
-        self.neuron.location_top        = 39
-        self.neuron.location_width      = 106
-        self.neuron.location_left = self.neuron.model.neurons[-1][-1].location_left + self.neuron.model.neurons[-1][-1].location_width+ 30
+    # Layout constants
+    ROW_HEIGHT = 19
+    ROW_SPACING = 1.15
+    TOP_OFFSET = 35
+    OVERHANG = 24
+    HEIGHT_PADDING = 459
 
-        # Weight mechanics
-        self.ez_printer                 = ez_printer
-        self.my_fcking_labels           = [] # WARNING: Do NOT rename. Debugging hell from Python interpreter defects led to this.
-        self.label_y_positions          = []
-        self.need_label_coord           = True #track if we recorded the label positions for the arrows to point from
-
-    def render(self):                   #self.debug_weight_changes()
-
-        rs                              = Const.dm.get_sample_data(self.neuron.run_id)
-        prediction_raw                  = rs.get("prediction_raw",  "[]")
-        prediction_unscaled             = rs.get("prediction_unscaled",  "[]")
-        target_raw                      = rs.get("target",  "[]")
-        target_unscaled                 = rs.get("target_unscaled",  "[]")
-        error_raw                       = rs.get("error",  "[]")
-        error_unscaled                  = rs.get("error_unscaled",  "[]")
-        is_true                         = rs.get("is_true")
-
-        # Don't display if target is not scaled
-        if target_raw                   == target_unscaled  and prediction_raw == prediction_unscaled and error_raw == error_unscaled:
-            prediction_unscaled         = " "
-            target_unscaled             = " "
-            error_unscaled              = " "
-
-            # Add label to binary decision target
-            if self.neuron.TRI.training_data.is_binary_decision:
-                alpha_value = self.neuron.TRI.BD.target_min  # 0
-                beta_value = self.neuron.TRI.BD.target_max  # 1
-                labels = [self.neuron.TRI.BD.label_min, self.neuron.TRI.BD.label_max]
-
-                try:
-                    targ_val = float(target_raw)
-                    # Target is discrete - just check which class it is
-                    if targ_val == beta_value:
-                        label_text = labels[1]
-                    else:  # targ_val == alpha_value
-                        label_text = labels[0]
-                    target_raw = f"{smart_format(target_raw)} - {label_text}"
-                except (ValueError, TypeError):
-                    pass
-
-        self.draw_top_plane()
-        self.output_one_set(2, prediction_raw, "Prediction", prediction_unscaled)
-        self.output_one_set(1, target_raw,"Target", target_unscaled)
-
-        self.output_one_set(3, error_raw,"Error", error_unscaled)
-        self.need_label_coord = False
-
-    def output_one_set(self, index, label, raw_value, unscaled_value):
-
-        y_pos = (index - 1) * 2 * self.oval_height * .96 +self.oval_vertical_tweak + self.neuron.location_top
-        self.draw_oval_with_text(
-            self.neuron.location_left- self.oval_overhang,
-            y_pos,
-            self.neuron.location_width + self.oval_overhang*2,
-            True,
-            label,
-            raw_value,
-            unscaled_value,
-            text_color=Const.COLOR_WHITE,
-            padding=8
-        )
-
-        if self.need_label_coord: #  and raw_value == "Prediction":
-            self.label_y_positions.append((self.neuron.location_left + self.oval_overhang + self.neuron.location_width, y_pos+ self.oval_height * .5))
-            if raw_value == "Prediction":
-                self.my_fcking_labels.append((self.neuron.location_left- self.oval_overhang, y_pos+ self.oval_height * .5))
-
-
-    def draw_oval_with_text(
-        self,        x, y,
-        proposed_width,  overhang,
-        raw_value, label, unscaled_value,
-        text_color=(Const.COLOR_WHITE),
-        padding=8
-    ):
-        """
-        Draws a horizontal oval of size (width×height) at (x,y),
-        then left-aligns text1 in the left half-circle,
-              center-aligns text2 in the middle,
-              right-aligns unscaled_value in the right half-circle.
-        """
-        # 1) draw the shape
-
-        if overhang:
-            width = proposed_width * 1.1
-            pill_rect = pygame.Rect(x- proposed_width*.05, y, width, self.oval_height)
+    def __init__(self, neuron):
+        self.neuron = neuron
+        output_nid  = neuron.nid-1
+        #self.neuron.location_top = self.neuron.model.neurons[output_nid].location_top
+        if self.has_scaling():
+            self.ROW_SPACING = 1.69
         else:
-            width = proposed_width
-            pill_rect = pygame.Rect(x, y, width, self.oval_height)
-
-        self.draw_pill(pill_rect)
-
-        # 2) compute the three areas
-        radius = self.oval_height // 2
-        txt_y_adj = 52
-        label_area  = pygame.Rect(x + 12, y- self.oval_height   *  .69 - 3,   width - 2*radius-11, self.oval_height)
-        left_area   = pygame.Rect(x, y ,  self.oval_height, self.oval_height)
-        right_area  = pygame.Rect(x + width - self.oval_height-30, y , self.oval_height, self.oval_height)
+            self.HEIGHT_PADDING = 3
+            self.neuron.location_width = self.neuron.location_width *.8
 
 
-        if self.neuron.model.layer_width < 160:
-            text1 = ""    #not enough room so remove it.
+    def render(self):
+        """Render prediction/target/error rows"""
+        self.neuron.draw_top_plane(y_offset=-7)
 
-        # 3) blit the three texts
-
-        global_label_area = label_area.move(self.neuron.model.left-11, self.neuron.model.top)
-        txt_y_adj = 2
-        global_pill_rect =  pill_rect.move(self.neuron.model.left,self.neuron.model.top+ txt_y_adj)
-
-        Const.dm.schedule_draw(
-            self.blit_text_aligned,
-            Const.SCREEN,
-            global_label_area,
-            label,
-            self.font,
-            Const.COLOR_BLACK,
-            'left',
-            padding
-        )
-
-        Const.dm.schedule_draw(
-            self.blit_text_aligned,
-            Const.SCREEN,
-            global_pill_rect,
-            smart_format(raw_value),
-            self.font,
-            text_color,
-            'left',
-            padding
-        )
+        if self.has_scaling():
+            self.render_scaled_mode()
+        else:
+            self.render_unscaled_mode()
 
 
 
-        Const.dm.schedule_draw(
-            self.blit_text_aligned,
-            Const.SCREEN,
-            global_pill_rect,
-            smart_format(unscaled_value),
-            self.font,
-            text_color,
-            'right',
-            padding
-        )
+        self.neuron.need_label_coord = False
 
-    def draw_differentshapeneuron(self):
-        # 2) draw the header (same hack you had before) #Draws the 3d looking oval behind the header to differentiate
-        top_plan_rect  = pygame.Rect(self.neuron.location_left, self.neuron.location_top, self.neuron.location_width,self.neuron.location_height )
-        self.draw_pill(top_plan_rect)
+    def has_scaling(self):
+        """Check if target scaling is active"""
+        rs = Const.dm.get_sample_data(self.neuron.run_id)
+        return (rs.get("prediction_raw") != rs.get("prediction_unscaled") or
+                rs.get("target") != rs.get("target_unscaled") or
+                rs.get("error") != rs.get("error_unscaled"))
 
-    def draw_top_plane(self):
-        # 2) draw the header (same hack you had before) #Draws the 3d looking oval behind the header to differentiate
-        top_plan_rect  = pygame.Rect(self.neuron.location_left, self.neuron.location_top-6.9, self.neuron.location_width, self.banner_height )
-        self.draw_pill(top_plan_rect)
-        #self.draw_differentshapeneuron()
+    def get_scaled_rows(self):
+        """Return [(label, scaled, unscaled), ...] for scaled mode"""
+        rs = Const.dm.get_sample_data(self.neuron.run_id)
+        return [
+            ("Target", rs.get("target", ""), rs.get("target_unscaled", "")),
+            ("Prediction", rs.get("prediction_raw", ""), rs.get("prediction_unscaled", "")),
+            ("Error", rs.get("error", ""), rs.get("error_unscaled", "")),
+        ]
 
+    def get_unscaled_rows(self):
+        """Return [(label, value), ...] for unscaled mode - 6 rows total"""
+        rs = Const.dm.get_sample_data(self.neuron.run_id)
+        return [
+            ("Target", None),
+            (None, rs.get("target", "")),
+            ("Prediction", None),
+            (None, rs.get("prediction_raw", "")),
+            ("Error", None),
+            (None, rs.get("error", "")),
+        ]
 
-    def draw_pill(self,  rect, color= Const.COLOR_BLUE):
-        """
-        Draws a horizontal pill (oval the long way) into rect:
-        two half-circles on the ends plus a connecting rectangle.
-        """
-        x, y, w, h = rect
-        radius = h // 2
+    def render_scaled_mode(self):
+        """Render three-part pills with overhang"""
+        rows = self.get_scaled_rows()
 
-        # center rectangle
-        center_rect = pygame.Rect(x + radius, y, w - 2*radius, h)
-        #ez_debug(center_rect=center_rect)
-        pygame.draw.rect(self.neuron.screen, color, center_rect)
+        for index, row_data in enumerate(rows):
+            self.draw_scaled_row(index, row_data)
 
-        # end-caps
-        pygame.draw.circle(self.neuron.screen, color, (x + radius, y + radius), radius)
-        pygame.draw.circle(self.neuron.screen, color, (x + w - radius, y + radius), radius)
+        self.neuron.location_height = self.TOP_OFFSET + len(
+            rows) * self.ROW_HEIGHT * self.ROW_SPACING + self.HEIGHT_PADDING
 
-    def blit_text_aligned(self, surface, area_rect, text, font, color,  align, padding=5):
-        """
-        Renders text into area_rect with one of three alignments:
-          'left', 'center', 'right'.
-        """
-        text=str(text)
-        surf = font.render(text, True, color)
-        r = surf.get_rect()
-        # vertical center
-        r.centery = area_rect.centery
+    def render_unscaled_mode(self):
+        """Render label/value pairs without pills"""
+        rows = self.get_unscaled_rows()
 
-        if align == 'left':
-            r.x = area_rect.x + padding
-        elif align == 'right':
-            r.right = area_rect.right - padding
-        else:  # center
-            r.centerx = area_rect.centerx
+        for index, row_data in enumerate(rows):
+            self.draw_unscaled_row(index, row_data)
 
-        surface.blit(surf, r)
+        self.neuron.location_height = self.TOP_OFFSET + len(
+            rows) * self.ROW_HEIGHT * self.ROW_SPACING + self.HEIGHT_PADDING
+
+    def draw_scaled_row(self, index, row_data):
+        """Draw three-part pill: scaled | label | unscaled"""
+        label, scaled_value, unscaled_value = row_data
+
+        y_pos = self.TOP_OFFSET + index * self.ROW_HEIGHT * self.ROW_SPACING + self.neuron.location_top
+        x = self.neuron.location_left - self.OVERHANG
+        width = self.neuron.location_width + self.OVERHANG * 2
+
+        # Draw pill
+        pill_rect = (x, y_pos, width, self.ROW_HEIGHT)
+        self.neuron.draw_pill(pill_rect)
+
+        # Schedule text draws (global coords)
+        global_pill = self.neuron.to_global_rect(pygame.Rect(pill_rect))
+        global_pill.y += 2
+
+        self.neuron.schedule_text(global_pill, smart_format(scaled_value), Const.COLOR_WHITE, 'left')
+        self.neuron.schedule_text(global_pill, label, Const.COLOR_WHITE, 'center')
+        self.neuron.schedule_text(global_pill, smart_format(unscaled_value), Const.COLOR_WHITE, 'right')
+
+        # Store arrow anchors
+        if self.neuron.need_label_coord:
+            self.store_arrow_anchors_scaled(index, label, y_pos)
+
+    def draw_unscaled_row(self, index, row_data):
+        """Draw label (left) or value (right) - no pill"""
+        label, value = row_data
+
+        y_pos = self.TOP_OFFSET + index * self.ROW_HEIGHT * self.ROW_SPACING + self.neuron.location_top
+
+        row_rect = pygame.Rect(self.neuron.location_left, y_pos, self.neuron.location_width, self.ROW_HEIGHT)
+        global_rect = self.neuron.to_global_rect(row_rect)
+        global_rect.y += 2
+
+        if label is not None:
+            self.neuron.schedule_text(global_rect, label, Const.COLOR_BLACK, 'left')
+        if value is not None:
+            self.neuron.schedule_text(global_rect, smart_format(value), Const.COLOR_BLACK, 'right')
+
+            # Store arrow anchors on value rows only
+            if self.neuron.need_label_coord:
+                self.store_arrow_anchors_unscaled(index, y_pos)
+
+    def store_arrow_anchors_scaled(self, index, label, y_pos):
+        """Store arrow anchors for scaled mode"""
+        center_y = y_pos + self.ROW_HEIGHT * 0.5
+        right_x = self.neuron.location_left + self.neuron.location_width + self.OVERHANG
+
+        self.neuron.label_y_positions.append((right_x, center_y))
+        if label == "Prediction":
+            self.neuron.my_fcking_labels.append((self.neuron.location_left - self.OVERHANG, center_y))
+
+    def store_arrow_anchors_unscaled(self, index, y_pos):
+        """Store arrow anchors for unscaled mode (value rows only)"""
+        center_y = y_pos + self.ROW_HEIGHT * 0.5
+        right_x = self.neuron.location_left + self.neuron.location_width
+
+        self.neuron.label_y_positions.append((right_x, center_y))
+        # Prediction is index 3 (the value row after "Prediction" label)
+        if index == 3:
+            self.neuron.my_fcking_labels.append((self.neuron.location_left, center_y))
+
+    # Proxy properties for arrow coord access via old path
+    @property
+    def my_fcking_labels(self):
+        return self.neuron.my_fcking_labels
+
+    @property
+    def label_y_positions(self):
+        return self.neuron.label_y_positions

@@ -54,7 +54,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
         #record_results(TRI, batch_id, run_id)  # Store Config for this model #TODO make use of RecordLevel
         return TRI
 
-    def learning_rate_sweep(self, setup, batch):
+    def learning_rate_sweepDELETEME(self, setup, batch):
         """
         Bidirectional sweep: test upward from 1e-6 to 1.0, then downward from 1e-6 to 1e-15.
         Stops early if no improvement after `patience` trials in each phase.
@@ -81,6 +81,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
             setup["learning_rate"] = lr
             TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
             error = TRI.mae
+            print(f"Conv={TRI.converge_cond}")
             print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
             trials += 1
 
@@ -132,6 +133,101 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
 
         print(f"\t😈\t🏆🏆🏆 Best learning_rate = {best_lr:.1e} (best error = {best_error:.5f}) 🏆🏆🏆\n")
         return best_lr
+
+    # NeuroEngine.py, learning_rate_sweep
+    def learning_rate_sweep(self, setup, batch):
+        """
+        Bidirectional sweep: test upward from 1e-6 to 1.0, then downward from 1e-6 to 1e-15.
+        Stops early if no improvement after `patience` trials in each phase.
+        Returns the best learning rate found.
+        """
+        start_lr = 1e-6
+        min_lr = 1e-15
+        max_lr = 1.0
+        max_trials = 20
+        patience = 3
+
+        best_error = float("inf")
+        best_lr = None
+        trials = 0
+        gradient_explosions = 0
+
+        print(f"\t😈😈 Welcome to the Learning Rate Sweep. Because setting learning rate manually stinks 😈😈")
+
+        # ╔══ Phase 1: Upward sweep (1e-6 → 1.0) ══╗
+        lr = start_lr
+        factor = 10
+        no_improve_count = 0
+
+        while lr <= max_lr and trials < max_trials:
+            setup["learning_rate"] = lr
+            TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
+            error = TRI.mae
+            print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
+            # print(f"Conv={TRI.converge_cond}")
+            trials += 1
+
+            # Check for gradient explosion - skip this LR
+            if TRI.converge_cond == "Gradient Explosion":
+                gradient_explosions += 1
+                break  # Stop upward phase on first explosion
+
+            # Track best (only if not exploded)
+            if error < best_error:
+                best_error = error
+                best_lr = lr
+                no_improve_count = 0
+            else:
+                no_improve_count += 1
+
+            if no_improve_count >= patience:
+                break
+
+            lr *= factor
+
+        # ╔══ Phase 2: Downward sweep (1e-6 → 1e-15) ══╗
+        lr = start_lr
+        factor = 0.1
+        no_improve_count = 0  # Reset patience for phase 2
+
+        while lr >= min_lr and trials < max_trials:
+            setup["learning_rate"] = lr
+            TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
+            error = TRI.mae
+            print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
+            print(f"Conv={TRI.converge_cond}")
+            trials += 1
+
+            # Check for gradient explosion - skip this LR
+            if TRI.converge_cond == "Gradient Explosion":
+                gradient_explosions += 1
+                break  # Stop downward phase on first explosion
+
+            # Track best (only if not exploded)
+            if error < best_error:
+                best_error = error
+                best_lr = lr
+                no_improve_count = 0
+            else:
+                no_improve_count += 1
+
+            if no_improve_count >= patience:
+                break
+
+            lr *= factor
+
+        # Raise error if all LRs caused gradient explosion
+        if best_lr is None:
+            raise RuntimeError(
+                f"Learning rate sweep failed: All {trials} learning rates tested caused gradient explosion. "
+                f"This likely indicates a problem with the model architecture, initialization, or data scaling."
+            )
+
+        print(f"\t😈\t🏆🏆🏆 Best learning_rate = {best_lr:.1e} (best error = {best_error:.5f}) 🏆🏆🏆\n")
+        return best_lr
+
+
+
 
     def check_for_clear(self, batch):
         """This makes batch runs go in near linear time"""
