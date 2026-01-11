@@ -39,6 +39,7 @@ Purpose 2B) We will admit it does have a few nice things.
 1) The ecosystem of readily available libraries
 2) Indenting as syntax.
 3) REPL friendliness — It’s a great playground. Just don’t build your house there.
+4) TYPE_CHECKING for circular imports - Finally, a solution that doesn't make you hate yourself.
 
 SUMMARY Someone should have told Guido 'Crack is whack!'
 '''

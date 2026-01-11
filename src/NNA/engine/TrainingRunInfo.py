@@ -1,28 +1,26 @@
 from enum import Enum
 
 from src.ArenaSettings import HyperParameters
+from src.NNA.engine.VCR_NNA import VCR_NNA
 from src.NNA.utils import RamDB
 from datetime import datetime
 
 from src.NNA.engine.BinaryDecision import BinaryDecision
 from src.NNA.engine.Config import Config
 from src.NNA.engine.TrainingData import TrainingData
+from src.NNA.utils.enums import RecordLevel
 
-
-class RecordLevel(Enum):
-    NONE    = 0     # No recording — e.g., hyperparameter sweep (LR probe)
-    SUMMARY = 1     # Basic stats: accuracy, loss, convergence, etc.
-    FULL    = 2     # + Iteration history, weight deltas, etc. (NeuroForge playback)
-    DEBUG   = 3     # + Diagnostics, blame signals, and dev-level traces
 
 class TrainingRunInfo:
     def __init__(self, hyper: HyperParameters, training_data: TrainingData, setup: dict, record_level: RecordLevel, run_id: int):
         self.record_level:      RecordLevel         = record_level
-        self.db: RamDB = hyper.db_ram
+        self.db:                RamDB               = hyper.db_ram
         self.training_data:     TrainingData        = training_data
         self.hyper:             HyperParameters     = hyper
         self.config:            Config              = Config(self)
         self.BD:                BinaryDecision      = BinaryDecision(training_data)
+        self.vcr_nna:           VCR_NNA             = VCR_NNA(self)  #reference set in base gladiator.
+        self.backprop_headers:  list                = None
         self.setup:             dict                = setup                 #the string written to db with purpose of rerunning exactly at a later date
         self.gladiator:         str                 = setup["gladiator"]
         self.run_id:            int                 = run_id

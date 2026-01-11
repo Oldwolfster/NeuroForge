@@ -2,7 +2,7 @@
 git status                              # Check the status of your files
 git add .                               # Stage all changes
 git commit -m "Your commit message"     # Commit changes with a message
-git push origin master                  # Push changes to the 'master' branch on 'origin'
+git push origin main                    # Push changes to the 'master' branch on 'origin'
 OR
 git push                                # If your local master branch is already tracking origin/master, you can simply use
 g

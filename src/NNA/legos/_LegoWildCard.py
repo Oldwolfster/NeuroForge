@@ -21,11 +21,11 @@ class LegoLoader:
         """Wildcard expansion: 'initializer' -> [Initializer_Xavier, Initializer_He, ...]"""
         prefix = self.dimension_aliases.get(dimension_key, dimension_key.capitalize())
         lego_file = self.legos_dir / f"{prefix}.py"
-
+        print("get all legos")
         if not lego_file.exists():          raise ValueError(f"No lego file: {lego_file}")
 
         instance_names = self.scan_for_instances(lego_file, prefix)
-        module = importlib.import_module(f".{prefix}", package="src.NNA.Legos")
+        module = importlib.import_module(f".{prefix}", package="src.NNA.legos")
 
         instances = []
         for name in instance_names:
@@ -35,22 +35,37 @@ class LegoLoader:
 
         return instances
 
+
     def scan_for_instances(self, lego_file: Path, prefix: str) -> list:
         """Find all 'Prefix_Something = ' declarations in file"""
         instances = []
         target = f"{prefix}_"
+        try:
+            with open(lego_file, 'r') as f:
+                for line in f:
+                    stripped = line.lstrip()
+                    if not stripped.startswith(target):
+                        continue
+                    # Find the instance name (everything before ' =' or '=')
+                    for i, char in enumerate(stripped):
+                        if char in ' =':
+                            instance_name = stripped[:i]
+                            instances.append(instance_name)
+                            break
 
-        with open(lego_file, 'r') as f:
-            for line in f:
-                stripped = line.lstrip()
-                if not stripped.startswith(target):
-                    continue
-                # Find the instance name (everything before ' =' or '=')
-                for i, char in enumerate(stripped):
-                    if char in ' =':
-                        instance_name = stripped[:i]
-                        instances.append(instance_name)
-                        break
+        except UnicodeDecodeError:
+            # Fallback to latin-1 which accepts all bytes
+            with open(lego_file, 'r', encoding='latin-1') as f:
+                for line in f:
+                    stripped = line.lstrip()
+                    if not stripped.startswith(target):
+                        continue
+                    # Find the instance name (everything before ' =' or '=')
+                    for i, char in enumerate(stripped):
+                        if char in ' =':
+                            instance_name = stripped[:i]
+                            instances.append(instance_name)
+                            break
 
         return instances
 
@@ -71,7 +86,7 @@ class LegoLoader:
         lego_file = self.legos_dir / f"{prefix}.py"
 
         instance_names = self.scan_for_instances(lego_file, prefix)
-        module = importlib.import_module(f".{prefix}", package="src.NNA.Legos")
+        module = importlib.import_module(f".{prefix}", package="src.NNA.legos")
 
         for name in instance_names:
             module_instance = getattr(module, name, None)

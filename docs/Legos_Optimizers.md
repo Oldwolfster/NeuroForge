@@ -137,6 +137,23 @@ Brain returns ALL display values - Your original plan had brain return (adjustme
 Added buffering - Not in original plan, but Knuth insisted. 5000-row batching to avoid INSERT spam.
 Generic dictionary write - Made write_weight_update() completely generic for any flat dict, with add_standard_fields() extension point.
 
+UPDATE 2:
+COMPLETED - Two-Method Optimizer API
+fn_leverage(neuron, weight_id, TRI) - Called every sample
+- Calculates leverage for current sample
+- Returns display dict (Input, Blame, Leverage, etc.)
+- Completely stateless
+
+- fn_adjustment(neuron, weight_id, TRI, avg_leverage) - Called only at batch boundary
+- Takes accumulated average leverage
+- Returns adjustment as scalar
+- Can access neuron for state (Adam will need this)
+
+Key Design Decisions:
+Brain is pure calculation - No state management, no accumulation
+Framework handles everything else - Accumulation, timing, recording, resetting
+LR multiplication stays in framework - Optimizer never touches learning rate
+Display values come from fn_leverage - Keeps it simple for now (will solve Adam's extra values when we get there)
 
 
 
@@ -197,7 +214,7 @@ NeuroForge operates as two interconnected systems:
 
 ### 1.2 The Optimizer's Unique Burden
 
-Unlike other "Legos" (Activations, Initializers, Loss Functions, Scalers) which are **self-contained**, 
+Unlike other "legos" (Activations, Initializers, Loss Functions, Scalers) which are **self-contained**, 
 optimizers have **tentacles** reaching into multiple system components:
 
 | Component          | What Optimizer Touches                                      |

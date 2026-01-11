@@ -273,7 +273,6 @@ class DisplayModel__Neuron_Base:
         self.avg_err_sig_for_epoch = float(rs[0].get("average_accepted_blame") or 0.0)
         #print("in update_avg_error returning TRUE")
         return True
-
     def update_weights(self):
         """Fetches weights from the Weight table instead of JSON and populates self.weights and self.weights_before."""
         SQL = """
@@ -295,43 +294,24 @@ class DisplayModel__Neuron_Base:
             self.weights = []
             self.weights_before = []
 
-
-
+    def OLDinitialize_fonts(self):
+        self.font_header            = pygame.font.Font(None, Const.TOOLTIP_FONT_TITLE)
+        self.font_body              = pygame.font.Font(None, Const.TOOLTIP_FONT_BODY)
+        self.header_text            = self.font_header.render("Prediction               Adjust Weights To Improve", True, Const.COLOR_BLACK)
 
     def initialize_fonts(self):
         self.font_header = pygame.font.Font(None, Const.TOOLTIP_FONT_TITLE)
-        self.font_section = pygame.font.Font(None, Const.TOOLTIP_FONT_SUB)
+        self.font_section = pygame.font.Font(None, Const.TOOLTIP_FONT_SUB)  # Medium for Forward/Backward
         self.font_body = pygame.font.Font(None, Const.TOOLTIP_FONT_BODY)
 
-
-
+        # Create title based on neuron type
         if self.is_output:
-            eatme = "Output Neuron"
+            title = "Output Neuron: Prediction and Update Details"
         else:
-            eatme = f"Neuron {self.label}"
+            title = f"NEURON {self.label}: Prediction and Update Details"
 
-        # Create centered title
-        self.title_center =  f"{eatme}  Prediction and Update Details"
-
-        # Left side text: "Output" for output neurons, "NEURON X-Y" for hidden
-        if self.is_output:
-            self.title_right = ""
-        else:
-            self.title_right = ""
-
-        # Render parts
-        self.title_center_text = self.font_header.render(self.title_center, True, Const.COLOR_BLACK)
-        self.title_right_text = self.font_header.render(self.title_right, True, Const.COLOR_BLACK)
-
-        # Build backward pass text with formula
-        backward_text =  "Backward Pass1"
-        if hasattr(self.TRI.config, 'optimizer') and hasattr(self.TRI.config.optimizer, 'formula') and self.TRI.config.optimizer.formula:
-            backward_text += f": {self.TRI.config.optimizer.formula}"
-
-        self.header_text = self.font_section.render(f" Forward Pass                           {backward_text}", True,
-                                                    Const.COLOR_BLACK)
-
-
+        self.title_text = self.font_header.render(title, True, Const.COLOR_BLACK)
+        self.header_text = self.font_section.render(" Forward Pass                  Backward Pass", True, Const.COLOR_BLACK)
 
 ############################### BELOW HERE IS POP UP WINDOW ##################################
 ############################### BELOW HERE IS POP UP WINDOW ##################################
@@ -354,13 +334,13 @@ class DisplayModel__Neuron_Base:
         #TODO Fix this self.draw_highlighted_popup_cell(len(self.weights*2)+1, blame_y)
 
 
-    def draw_lines_for_header(self, extra_row: int):
+
+    def draw_lines_for_header(self, extra_row : int):
         pygame.draw.line(
             self.cached_tooltip,
             Const.COLOR_BLACK,
             (Const.TOOLTIP_PADDING, self.y_coord_for_row(Const.TOOLTIP_LINE_OVER_HEADER_Y + extra_row)),
-            (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING +52,
-             self.y_coord_for_row(Const.TOOLTIP_LINE_OVER_HEADER_Y + extra_row)),
+            (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING, self.y_coord_for_row(Const.TOOLTIP_LINE_OVER_HEADER_Y+ extra_row)),
             Const.TOOLTIP_HEADER_DIVIDER_THICKNESS
         )
 
@@ -373,7 +353,7 @@ class DisplayModel__Neuron_Base:
             self.cached_tooltip,
             Const.COLOR_GRAY_DARK,
             (Const.TOOLTIP_PADDING, y),
-            (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING+50, y),
+            (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING, y),
             Const.TOOLTIP_HEADER_DIVIDER_THICKNESS
         )
 
@@ -421,7 +401,7 @@ class DisplayModel__Neuron_Base:
         )
     def get_title_offset(self):
         """Returns the Y offset needed to account for the title header."""
-        return self.title_right_text.get_height() + 5
+        return self.title_text.get_height() + 5
 
     def y_coord_for_row(self, row_index: int) -> int:
         return Const.TOOLTIP_HEADER_PAD + (row_index * Const.TOOLTIP_ROW_HEIGHT) + self.get_title_offset()
@@ -429,122 +409,83 @@ class DisplayModel__Neuron_Base:
     def x_coord_for_col(self, index: int) -> int:
         return Const.TOOLTIP_PADDING + sum(self.column_widths[:index])
 
-    # DisplayModel__Neuron_Base.py
     def render_tooltip(self):
-        """Render the tooltip with neuron details. Cache and only update if epoch or sample changes."""
-        if self.should_redraw_tooltip():
-            self.last_epoch = self.model.display_epoch
-            self.last_sample = Const.vcr.CUR_SAMPLE
-            self.rebuild_tooltip_surface()
+        """
+        Render the tooltip with neuron details.
+        Cache the rendered tooltip and only update if epoch or sample changes.
+        """
 
-        self.position_and_blit_tooltip()
+        # ✅ Check if we need to redraw the tooltip
+        if not hasattr(self, "cached_tooltip") or self.last_epoch != self.model.display_epoch or self.last_sample != Const.vcr.CUR_SAMPLE:
+            self.last_epoch = self.model.display_epoch  # ✅ Update last known epoch
+            self.last_sample = Const.vcr.CUR_SAMPLE  # ✅ Update last known sample
 
-    def should_redraw_tooltip(self):
-        """Check if tooltip needs to be redrawn."""
-        return (not hasattr(self, "cached_tooltip") or
-                self.last_epoch != self.model.display_epoch or
-                self.last_sample != Const.vcr.CUR_SAMPLE)
+            # ✅ Tooltip dimensions
+            tooltip_width = Const.TOOLTIP_WIDTH
+            tooltip_height = Const.TOOLTIP_HEIGHT
 
-    def rebuild_tooltip_surface(self):
-        """Rebuild the entire tooltip surface."""
-        self.cached_tooltip = pygame.Surface((Const.TOOLTIP_WIDTH, Const.TOOLTIP_HEIGHT), pygame.SRCALPHA)
-        self.cached_tooltip.fill(Const.COLOR_CREAM)
-        pygame.draw.rect(self.cached_tooltip, Const.COLOR_BLACK, (0, 0, Const.TOOLTIP_WIDTH, Const.TOOLTIP_HEIGHT), 2)
+            # ✅ Create a new surface for the tooltip
+            self.cached_tooltip = pygame.Surface((tooltip_width, tooltip_height), pygame.SRCALPHA)
 
-        self.draw_tooltip_title()
-        self.draw_tooltip_section_headers()
-        self.tooltip_generate_text()
-        self.draw_all_popup_dividers()
-        self.draw_tooltip_columns()
-        print("draw blame soon")
-        self.draw_blame_sources_section()
+            # ✅ Fill background and draw border
+            self.cached_tooltip.fill(Const.COLOR_CREAM)
+            pygame.draw.rect(self.cached_tooltip, Const.COLOR_BLACK, (0, 0, tooltip_width, tooltip_height), 2)
+
+            # ✅ Draw header
+            #old self.cached_tooltip.blit(self.header_text, (Const.TOOLTIP_PADDING, Const.TOOLTIP_PADDING))
+            # ✅ Draw title header
+            title_y = Const.TOOLTIP_PADDING
+            title_x = (Const.TOOLTIP_WIDTH - self.title_text.get_width()) // 2
+            self.cached_tooltip.blit(self.title_text, (title_x, title_y+3))
+            # ✅ Draw horizontal line below title
+            line_y = title_y + self.title_text.get_height() + 3
+            pygame.draw.line(
+                self.cached_tooltip,
+                Const.COLOR_BLACK,
+                (Const.TOOLTIP_PADDING, line_y),
+                (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING, line_y),
+                4  # Line thickness
+            )
+            # ✅ Draw section headers (Forward Pass / Backward Pass)
+            # Position it below the title with some spacing
+            section_header_y = title_y + self.title_text.get_height() + 10
+            self.cached_tooltip.blit(self.header_text, (Const.TOOLTIP_PADDING, section_header_y))
 
 
-    def rebuild_tooltip_surface(self):
-        """Rebuild the entire tooltip surface."""
-        self.cached_tooltip = pygame.Surface((Const.TOOLTIP_WIDTH, Const.TOOLTIP_HEIGHT), pygame.SRCALPHA)
-        self.cached_tooltip.fill(Const.COLOR_CREAM)
-        pygame.draw.rect(self.cached_tooltip, Const.COLOR_BLACK, (0, 0, Const.TOOLTIP_WIDTH, Const.TOOLTIP_HEIGHT), 2)
+            # ✅ Populate content
+            self.tooltip_generate_text()
 
-        self.draw_tooltip_title()
-        self.tooltip_generate_text()  # <- MOVE THIS UP (creates column_widths)
-        self.draw_tooltip_section_headers()  # <- NOW this can use column_widths
-        self.draw_all_popup_dividers()
-        self.draw_tooltip_columns()
-        self.draw_blame_sources_section()
+            self.draw_all_popup_dividers()
+            x_offset = Const.TOOLTIP_PADDING
 
-    # DisplayModel__Neuron_Base.py
-    def draw_tooltip_title(self):
-        """Draw the three-part title header."""
-        title_y = Const.TOOLTIP_PADDING
+            # ✅ Draw each column with dynamic spacing
+            for col_index, (column, col_width) in enumerate(zip(self.tooltip_columns, self.column_widths)):
+                for row_index, text in enumerate(column):
+                    text_color = self.get_text_color(col_index, row_index, text)
+                    text = self.smart_format_for_popup(text)
+                    #label = self.font_body.render(str(text), True, text_color)
+                    #self.cached_tooltip.blit(label, (                        x_offset,                        Const.TOOLTIP_HEADER_PAD + row_index * Const.TOOLTIP_ROW_HEIGHT + Const.TOOLTIP_PADDING                    ))
+                    label = self.font_body.render(str(text), True, text_color)
+                    text_rect = label.get_rect()
+                    #y_pos = Const.TOOLTIP_HEADER_PAD + row_index * Const.TOOLTIP_ROW_HEIGHT + Const.TOOLTIP_PADDING
+                    # Add extra offset for the title header
+                    title_offset = self.title_text.get_height() + 5
+                    y_pos = Const.TOOLTIP_HEADER_PAD + title_offset + row_index * Const.TOOLTIP_ROW_HEIGHT + Const.TOOLTIP_PADDING
+                    x_pos = x_offset
 
-        # Left: Neuron ID
-        self.cached_tooltip.blit(self.title_right_text, (Const.TOOLTIP_PADDING + 50, title_y + 3))
+                    if self.is_right_aligned(text, row_index):
+                        text_rect.topright = (x_offset + col_width - Const.TOOLTIP_PADDING, y_pos)
+                    else:
+                        text_rect.topleft = (x_offset + Const.TOOLTIP_PADDING, y_pos)
+                    self.cached_tooltip.blit(label, text_rect)
+                x_offset += col_width  # ✅ Move X position based on column width
 
-        # Center: Main title
-        title_x_center = (Const.TOOLTIP_WIDTH - self.title_center_text.get_width()) // 2
-        self.cached_tooltip.blit(self.title_center_text, (title_x_center, title_y + 3))
-
-        # Right: Epoch/Sample
-        #title_right = self.font_header.render(f"Epoch:{self.model.display_epoch} Sample:{Const.vcr.CUR_SAMPLE}", True,
-        #                                      Const.COLOR_BLACK)
-        #title_x_right = Const.TOOLTIP_WIDTH - title_right.get_width() - Const.TOOLTIP_PADDING - 50
-        #self.cached_tooltip.blit(title_right, (title_x_right, title_y + 3))
-
-        # Draw horizontal line below title
-        line_y = title_y + self.title_right_text.get_height() + 3
-        pygame.draw.line(self.cached_tooltip, Const.COLOR_BLACK, (Const.TOOLTIP_PADDING, line_y),
-                         (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING, line_y), 4)
-    def draw_tooltip_section_headers(self):
-        """Draw Forward Pass and Backward Pass headers with optional formula."""
-        title_y = Const.TOOLTIP_PADDING
-        section_header_y = title_y + self.title_right_text.get_height() + 10
-
-        # Forward Pass
-        header_forward = self.font_section.render("Forward Pass", True, Const.COLOR_BLACK)
-        self.cached_tooltip.blit(header_forward, (Const.TOOLTIP_PADDING, section_header_y))
-
-        # Backward Pass with formula
-        backward_text = " Backward Pass"
-        if (hasattr(self.TRI.config, 'optimizer') and hasattr(self.TRI.config.optimizer, 'formula')
-                and self.TRI.config.optimizer.formula):
-            backward_text += f": {self.TRI.config.optimizer.formula}"
-
-        header_backward = self.font_section.render(backward_text, True, Const.COLOR_BLACK)
-        backward_x = self.x_coord_for_col(6)
-        self.cached_tooltip.blit(header_backward, (backward_x, section_header_y))
-
-    def draw_tooltip_columns(self):
-        """Draw all tooltip columns with proper alignment."""
-        x_offset = Const.TOOLTIP_PADDING
-        title_offset = self.title_right_text.get_height() + 5
-
-        for col_index, (column, col_width) in enumerate(zip(self.tooltip_columns, self.column_widths)):
-            for row_index, text in enumerate(column):
-                self.draw_tooltip_cell(text, col_index, row_index, x_offset, col_width, title_offset)
-            x_offset += col_width
-
-    def draw_tooltip_cell(self, text, col_index, row_index, x_offset, col_width, title_offset):
-        """Draw a single cell in the tooltip."""
-        text_color = self.get_text_color(col_index, row_index, text)
-        text = self.smart_format_for_popup(text)
-        label = self.font_body.render(str(text), True, text_color)
-        text_rect = label.get_rect()
-
-        y_pos = Const.TOOLTIP_HEADER_PAD + title_offset + row_index * Const.TOOLTIP_ROW_HEIGHT + Const.TOOLTIP_PADDING
-
-        if self.is_right_aligned(text, row_index):
-            text_rect.topright = (x_offset + col_width - Const.TOOLTIP_PADDING, y_pos)
-        else:
-            text_rect.topleft = (x_offset + Const.TOOLTIP_PADDING, y_pos)
-
-        self.cached_tooltip.blit(label, text_rect)
-
-    def position_and_blit_tooltip(self):
-        """Position tooltip near mouse and blit to screen."""
+        # ✅ Get mouse position and adjust tooltip placement
         mouse_x, mouse_y = pygame.mouse.get_pos()
         tooltip_x = self.adjust_position(mouse_x + Const.TOOLTIP_PLACEMENT_X, Const.TOOLTIP_WIDTH, Const.SCREEN_WIDTH)
         tooltip_y = self.adjust_position(mouse_y + Const.TOOLTIP_PLACEMENT_Y, Const.TOOLTIP_HEIGHT, Const.SCREEN_HEIGHT)
+
+        # ✅ Draw cached tooltip onto the screen
         Const.SCREEN.blit(self.cached_tooltip, (tooltip_x, tooltip_y))
 
     def get_text_color(self,col_index, row_index, text):
@@ -570,10 +511,29 @@ class DisplayModel__Neuron_Base:
         """Clears and regenerates tooltip text columns."""
         self.tooltip_columns.clear()
         self.tooltip_columns.extend(self.tooltip_columns_for_forward_pass())
-        self.tooltip_columns.extend(self.tooltip_columns_for_backprop())
+        self.tooltip_columns.extend(self.tooltip_columns_for_backprop())  # 🔹 Uncomment when backprop data is ready
         self.set_column_widths()
 
-    # DisplayModel__Neuron_Base.py
+    def set_column_widths(self):
+        """
+        Dynamically sets the column widths based on tooltip column headers.
+        Assumes self.tooltip_columns is a list of vertical columns (each a list: [header, val1, val2, ...]).
+        """
+        col_info = 65
+        col_operator = 10
+        forward_cols = [45, 50, 10, col_info, 15, col_info]  # First 6 are fixed-width forward pass columns
+
+        dynamic_widths = []
+        for col in self.tooltip_columns[6:-3]:  # skip forward pass (6), and standard trailing stats (3)
+            header = col[0]
+            is_operator = isinstance(header, str) and len(header.strip()) <= 2 and header.strip().lower() not in {"m", "v", "t"}
+            width = col_operator if is_operator else col_info
+            dynamic_widths.append(width)
+
+        last_cols = [col_info, col_info, col_info]  # Final 3 summary stats (e.g., adjustment, lr, new weight)
+
+        self.column_widths = forward_cols + dynamic_widths + last_cols
+        Const.TOOLTIP_WIDTH = sum(self.column_widths)+69
 
 ################### Gather Values for Back Pass #############################
 ################### Gather Values for Back Pass #############################
@@ -620,69 +580,74 @@ class DisplayModel__Neuron_Base:
         std_finalize_cols = self.tooltip_columns_for_backprop_standard_finale()
         cols = update_cols + batch_finalize_cols + std_finalize_cols
         # 3) Finally inject your error signal section
-
-        return cols
         return self.tooltip_columns_for_error_signal_calculation(cols)
 
-        # DisplayModel__Neuron_Base.py
-        # DisplayModel__Neuron_Base.py
-        # DisplayModel__Neuron_Base.py
 
-    def build_simple_columns(self, headers, rows):
-        """
-        Given:
-          headers = ['h1', 'h2', 'h3', ...]
-          rows    = [(val1, val2, val3, ...), ...]
-        Returns list-of-lists:
-          [
-            ['h1', row1[0], row2[0], ...],
-            ['h2', row1[1], row2[1], ...],
-            ['h3', row1[2], row2[2], ...],
-          ]
-        """
-        columns = [[h] for h in headers]
-
-        for row in rows:
-            for i, val in enumerate(row):
-                columns[i].append(val)
-
-
-        return columns
-
-    def tooltip_columns_for_backprop_update(self, is_batch: bool, num_args: int = 5):
-
-        # Use actual headers captured from the optimizer dict.
-        if self.TRI.backprop_headers is not None:
-            headers = self.TRI.backprop_headers
-            num_args = len(headers)
+    def tooltip_columns_for_backprop_update(self, is_batch: bool):
+        # pick the right header/operator lists
+        # Pick the right headers based on CURRENT display context
+        if is_batch:
+            headers = self.config.optimizer._backprop_popup_headers_batch
+            operators = self.config.optimizer._backprop_popup_operators_batch
         else:
-            # Defensive fallback (shouldn't happen after first recording)
-            headers = [f"h{i + 1}" for i in range(num_args)]
+            headers = self.config.optimizer._backprop_popup_headers_single
+            operators = self.config.optimizer._backprop_popup_operators_single
 
-
-        # Build SELECT clause dynamically
-        arg_fields = [f"arg_{i + 1}" for i in range(num_args)]
+        # build the SELECT clause dynamically
+        num_args   = len(headers)
+        arg_fields = [f"arg_{i+1}" for i in range(num_args)]
+        table      = f"WeightAdjustments_update_{self.run_id}"
 
         sql = f"""
-                SELECT {', '.join(arg_fields)}
-                  FROM WeightAdjustments
-                 WHERE run_id    = ?
-                   AND epoch     = ?
-                   AND sample_id = ?
-                   AND nid       = ?
-                 ORDER BY weight_id ASC
-            """
-        params = (self.run_id,
-                  self.model.display_epoch,
+            SELECT {', '.join(arg_fields)}
+              FROM {table} A
+             WHERE A.epoch     = ?
+               AND A.sample    = ?
+               AND A.nid       = ?
+             ORDER BY A.weight_index ASC
+        """
+        params = (self.model.display_epoch,
                   Const.vcr.CUR_SAMPLE,
                   self.nid)
         rows = Const.dm.db.query(sql, params, as_dict=False)
 
-        return self.build_simple_columns(headers, rows)
-    def tooltip_columns_for_backprop_finalize(self, is_batch: bool):
-        # Not needed for batch_size=1, return empty
-        return []
+        return self._build_column_lists(headers, operators, rows)
 
+    def tooltip_columns_for_backprop_finalize(self, is_batch: bool):
+        # pick header/operator for the JOINed finalize block
+        # (you can keep this separate from standard_finale)
+        # Read directly from the optimizer object
+        headers = self.config.optimizer._backprop_popup_headers_finalizer
+        operators = self.config.optimizer._backprop_popup_operators_finalizer
+
+        # If optimizer has no finalizer headers, return empty
+        if not headers:
+            return []
+
+        num_args   = len(headers)
+        arg_fields = [f"B.arg_{i+1}" for i in range(num_args)]
+        upd_table  = f"WeightAdjustments_update_{self.run_id}"
+        fin_table  = f"WeightAdjustments_finalize_{self.run_id}"
+
+        sql = f"""
+            SELECT {', '.join(arg_fields)}
+              FROM {upd_table} AS A
+         LEFT JOIN {fin_table} AS B
+                ON A.batch_id     = B.batch_id
+               AND A.epoch        = B.epoch
+               AND A.nid          = B.nid
+               AND A.weight_index = B.weight_index
+             WHERE A.epoch     = ?
+               AND A.sample = ?
+               AND A.nid       = ?
+             ORDER BY A.weight_index ASC
+        """
+        params = (self.model.display_epoch,
+                  Const.vcr.CUR_SAMPLE,
+                  self.nid)
+        rows = Const.dm.db.query(sql, params, as_dict=False)
+
+        return self._build_column_lists(headers, operators, rows)
 
     def tooltip_columns_for_backprop_standard_finale(self) -> list:
         #col_lr = ["Lrn Rt"]  # NEW COLUMN
@@ -713,21 +678,23 @@ class DisplayModel__Neuron_Base:
 
         return [col_delta, col_before, col_after]
 
-    # DisplayModel__Neuron_Base.py, tooltip_columns_for_error_signal_calculation
+
     def tooltip_columns_for_error_signal_calculation(self, all_cols):
-        """Adds the error signal calculation section to the tooltip."""
-        # Add spacing row and divider text
-        for i in range(len(all_cols)):
+        # Row in the box between adj and blame
+        #print(f"len(all_cols)={len(all_cols)}")  #Prints blank row, empty space in each cell
+        for i in range(8):  #Do entire row
             if i == 0:
                 all_cols[0].append("BLAME SOURCES BELOW")
             else:
                 all_cols[i].append(" ")
-
+        #ez_debug(is_output=self.is_output)
+        #ez_debug(self_layer=self.layer)
+        #ez_debug(output_neuron_layer=Neuron.output_neuron.layer_id)
         if self.is_output:
+        #if self.is_output: # This is an output neuron
             return self.tooltip_columns_for_error_sig_outputlayer(all_cols)
         else:
             return self.tooltip_columns_for_error_sig_hiddenlayer(all_cols)
-
 
     def tooltip_columns_for_error_sig_outputlayer(self, all_cols):
         #all_cols[0].append("Accepted Blame Calculation Below")
@@ -741,63 +708,61 @@ class DisplayModel__Neuron_Base:
 
     def tooltip_columns_for_error_sig_hiddenlayer(self, all_cols):
         """
-        Builds the bottom blame sources section with proper column structure.
-        Creates 4 clean columns: From | Weight | Their Blame | Slice
+        Builds the bottom section showing where blame comes from (downstream neurons).
+
+        Table structure:
+        ┌──────────┬──────────┬─────────────┬───────────┐
+        │ From     │ Weight   │ Their Blame │ Slice     │
+        ├──────────┼──────────┼─────────────┼───────────┤
+        │ 2-0      │  30.04   │   4,623     │  138,883  │
+        │ 2-1      │  15.20   │   2,100     │   31,920  │
+        └──────────┴──────────┴─────────────┴───────────┘
+        Blame from All:                         170,803
+        × Activation Gradient (fwd):              0.001
+        ─────────────────────────────────────────────────
+        Accepted Blame:                           170.803
         """
-        # Add "BLAME SOURCES BELOW" divider in first column only
-        # (other columns already have spacing from previous section)
+        col_from = 0
+        col_weight = 2
+        col_blame = 4
+        col_slice = 8
 
-        # Create 4 new columns for blame section
-        col_from = ["From"]
-        col_weight = ["Weight"]
-        col_their_blame = ["Their Blame"]
-        col_slice = ["Slice"]
+        # Add spacing row before this section
+        all_cols[col_from].append(" ")
+        all_cols[col_weight].append(" ")
+        all_cols[col_blame].append(" ")
+        all_cols[col_slice].append(" ")
+        all_cols[col_slice].append(" ")
 
-        # Get data from database
-        weights, blames = self.get_elements_of_backproped_error()
+        # Add header row
+        all_cols[col_from].append("From")
+        all_cols[col_weight].append(" Weight")
+        all_cols[col_blame].append("Their Blame")
+        all_cols[col_slice].append("     Slice")
 
-        if weights:
-            # Generate "From" labels for downstream neurons
-            downstream_layer = self.layer + 1
-            feeds_to_output = (self.layer == len(self.config.architecture) - 2)
+        blame_from_all, accepted_blame = self.tooltip_columns_for_error_sig_hiddenlayer_data_rows(all_cols, col_from, col_weight, col_blame, col_slice)
 
-            # Add data rows - one per downstream connection
-            for i, (weight, blame) in enumerate(zip(weights, blames)):
-                if feeds_to_output:
-                    from_label = "Out" if len(weights) == 1 else f"Out-{i}"
-                else:
-                    from_label = f"{downstream_layer}-{i}"
+        all_cols[col_from].append(" ")
+        all_cols[col_weight].append(" ")
+        all_cols[col_blame].append(" ")
+        all_cols[col_slice].append(" ")
 
-                slice_value = weight * blame
+        # Add summary rows
+        all_cols[col_from].append(" ")
+        all_cols[col_weight].append(" ")
+        #all_cols[col_blame].append("  Blame from All:")
+        all_cols[col_blame].append("   Sum of Slices:")
+        all_cols[col_slice].append(blame_from_all)
 
-                col_from.append(from_label)
-                col_weight.append(weight)
-                col_their_blame.append(blame)
-                col_slice.append(slice_value)
+        all_cols[col_from].append("  Activation Gradient (from fwd pass):")
+        all_cols[col_weight].append(" ")
+        all_cols[col_blame].append(" ")
+        all_cols[col_slice].append(self.activation_gradient)
 
-            # Calculate totals
-            slices = [w * b for w, b in zip(weights, blames)]
-            blame_from_all = sum(slices)
-            accepted_blame = blame_from_all * self.activation_gradient
-
-            # Add summary section with proper alignment
-            col_from.append("")
-            col_weight.append("")
-            col_their_blame.append("Sum of Slices:")
-            col_slice.append(blame_from_all)
-
-            col_from.append("")
-            col_weight.append("")
-            col_their_blame.append("x Act Gradient:")
-            col_slice.append(self.activation_gradient)
-
-            col_from.append("")
-            col_weight.append("")
-            col_their_blame.append("= Accepted Blame:")
-            col_slice.append(accepted_blame)
-
-        # Append the 4 blame columns to existing columns
-        all_cols.extend([col_from, col_weight, col_their_blame, col_slice])
+        all_cols[col_from].append(" ")
+        all_cols[col_weight].append(" ")
+        all_cols[col_blame].append("Accepted Blame:")
+        all_cols[col_slice].append(accepted_blame)
 
         return all_cols
 
@@ -996,188 +961,3 @@ class DisplayModel__Neuron_Base:
         from src.NeuroForge.DisplayModel__NeuronWeights import DisplayModel__NeuronWeights
         self.visualizer_mode = "standard"
         self.neuron_visualizer = DisplayModel__NeuronWeights(self, self.ez_printer)
-
-
-
-################COLUMN WIDTHS################COLUMN WIDTHS################COLUMN WIDTHS
-    ################COLUMN WIDTHS################COLUMN WIDTHS################COLUMN WIDTHS
-    def set_column_widths(self):
-        """
-        Dynamically calculates column widths and tracks maximums to prevent shrinking.
-        """
-        # Initialize max width tracking if not exists
-        if not hasattr(self, 'max_column_widths'):
-            self.max_column_widths = []
-
-        # Local overrides - key is column index, value is fixed width
-        column_overrides = {
-            # Add overrides here as needed
-        }
-
-        self.column_widths = []
-
-        for col_index, column in enumerate(self.tooltip_columns):
-            # Check for override first
-            if col_index in column_overrides:
-                width = column_overrides[col_index]
-            elif col_index < 6:
-                # Forward pass columns
-                width = self.calculate_forward_pass_column_width(column)
-            else:
-                # Backward pass columns
-                width = self.calculate_backward_pass_column_width(column, col_index)
-
-            # Track maximum width ever seen for this column
-            if col_index >= len(self.max_column_widths):
-                self.max_column_widths.append(width)
-            else:
-                # Only grow, never shrink
-                width = max(width, self.max_column_widths[col_index])
-                self.max_column_widths[col_index] = width
-
-            self.column_widths.append(width)
-
-        # Update total tooltip width
-        Const.TOOLTIP_WIDTH = sum(self.column_widths) + (Const.TOOLTIP_PADDING * 2)
-
-    def calculate_forward_pass_column_width(self, column):
-        """Calculate width for forward pass columns based on header."""
-        MIN_WIDTH = 35
-
-        if len(column) > 0:
-            value = column[0]  # Use header
-            text = self.smart_format_for_popup(value)
-            rendered = self.font_body.render(str(text), True, Const.COLOR_BLACK)
-            width = rendered.get_width() + (Const.TOOLTIP_PADDING * 2)
-        else:
-            width = MIN_WIDTH
-
-        return max(width, MIN_WIDTH)
-
-    def calculate_backward_pass_column_width(self, column, col_index):
-        """Calculate width for backward pass columns, scanning all values except long labels."""
-        MIN_WIDTH = 35
-        MAX_LABEL_LENGTH = 15
-
-        # Add extra width for last column
-        is_last_column = col_index == len(self.tooltip_columns) - 1
-        extra_padding = 20 if is_last_column else 0
-
-        max_width = MIN_WIDTH
-        for value in column:
-            text = self.smart_format_for_popup(value)
-            text_str = str(text)
-
-            # Skip long text labels
-            if isinstance(value, str) and len(text_str) > MAX_LABEL_LENGTH:
-                continue
-
-            rendered = self.font_body.render(text_str, True, Const.COLOR_BLACK)
-            text_width = rendered.get_width() + (Const.TOOLTIP_PADDING * 2) + extra_padding
-            max_width = max(max_width, text_width)
-
-        return max(max_width, MIN_WIDTH)
-
-
-    ####################################################################################
-    ########################################################################################
-
-    # DisplayModel__Neuron_Base, draw_blame_sources_section
-
-    def draw_blame_sources_section(self):
-        """Renders blame sources section below main tooltip."""
-        if self.is_output:
-            return
-        weights, blames = self.get_elements_of_backproped_error()
-        if not weights:
-            return
-
-        x, y = self.calculate_blame_start_position()
-        y = self.draw_section_header(x, y)
-        y = self.draw_blame_table(x, y, weights, blames)
-        y = self.draw_table_end_line(x, y)
-        y = self.draw_blame_summary(x, y, weights, blames)
-        self.draw_bridge_text(x, y)  # No return needed, it's the last call
-
-    def calculate_blame_start_position(self):
-        x = Const.TOOLTIP_PADDING + sum(self.column_widths[:6]) +10
-        leaky_row_index = len(self.weights_before) + 1  # +1 for "Raw Sum" row
-        y = self.y_coord_for_row(leaky_row_index)
-        return x, y
-
-    def draw_section_header(self, x, y):
-        header = self.font_body.render("BLAME SOURCES", True, Const.COLOR_BLACK)
-        self.cached_tooltip.blit(header, (x, y + 5))  # Added +5 to lower it from ceiling
-        y += header.get_height() + 10  # Increased from +5 to +10 for more space
-        #pygame.draw.line(self.cached_tooltip, Const.COLOR_GRAY_DARK, (x, y),                         (Const.TOOLTIP_WIDTH - Const.TOOLTIP_PADDING, y), 2)
-        return y + 10
-
-    def draw_bridge_text(self, x, y):
-        bridge = self.font_section.render("ACCEPTED BLAME IS COLUMN 2 ABOVE", True, Const.COLOR_BLACK)
-        self.cached_tooltip.blit(bridge, (x, y))
-        return y + bridge.get_height() + 10
-
-    def draw_blame_summary(self, x, y, weights, blames):
-        slices = [w * b for w, b in zip(weights, blames)]
-        blame_from_all = sum(slices)
-        accepted_blame = blame_from_all * self.activation_gradient
-
-        widths = [60, 80, 100, 100]
-        slice_col_x = x + sum(widths[:3])
-
-        lines = [
-            ("Sum of Slices:", blame_from_all),
-            ("x Act Gradient:", self.activation_gradient),
-            ("= Accepted Blame:", accepted_blame)
-        ]
-
-        for label_text, value in lines:
-            label = self.font_body.render(label_text, True, Const.COLOR_BLACK)
-            val = self.font_body.render(self.smart_format_for_popup(value), True, Const.COLOR_BLACK)
-            self.cached_tooltip.blit(label, (slice_col_x - label.get_width() - 10, y))
-            val_rect = val.get_rect(topright=(slice_col_x + widths[3] - 5, y))
-            self.cached_tooltip.blit(val, val_rect)
-            y += Const.TOOLTIP_ROW_HEIGHT
-
-        return y + 5
-
-    def draw_blame_table(self, x, y, weights, blames):
-        headers = ["From", "Weight", "Their Blame", "Slice"]
-        widths = [60, 80, 100, 100]
-        self.draw_table_row(x, y, headers, widths)
-        y += Const.TOOLTIP_ROW_HEIGHT
-        downstream_layer = self.layer + 1
-        feeds_output = (self.layer == len(self.config.architecture) - 2)
-        for i, (weight, blame) in enumerate(zip(weights, blames)):
-            from_label = "Out" if feeds_output and len(
-                weights) == 1 else f"Out-{i}" if feeds_output else f"{downstream_layer}-{i}"
-            row = [from_label, weight, blame, weight * blame]
-            self.draw_table_row(x, y, row, widths)
-            y += Const.TOOLTIP_ROW_HEIGHT
-        return y + 10
-
-    def draw_table_row(self, x, y, values, widths):
-        font = self.font_body
-        curr_x = x
-        for i, (val, width) in enumerate(zip(values, widths)):
-            text = val if i == 0 else self.smart_format_for_popup(val)
-            rendered = font.render(text, True, Const.COLOR_BLACK)
-            if i == 0:
-                self.cached_tooltip.blit(rendered, (curr_x + 5, y))
-            else:
-                rect = rendered.get_rect(topright=(curr_x + width - 5, y))
-                self.cached_tooltip.blit(rendered, rect)
-            curr_x += width
-
-    # DisplayModel__Neuron_Base, draw_table_end_line (new method after draw_blame_table)
-
-    def draw_table_end_line(self, x, y):
-        """Draw line at end of table. Returns next y position."""
-        pygame.draw.line(self.cached_tooltip, Const.COLOR_GRAY_DARK, (x, y), (x + sum([60, 80, 100, 100]), y), 2)
-        return y + 10
-
-    # DisplayModel__Neuron_Base, draw_bridge_text (move to end, after summary)
-
-    def draw_bridge_text(self, x, y):
-        bridge = self.font_section.render("ACCEPTED BLAME IS COLUMN 2 ABOVE", True, Const.COLOR_BLACK)
-        self.cached_tooltip.blit(bridge, (x, y))

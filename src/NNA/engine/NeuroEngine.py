@@ -40,7 +40,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
             if record_level == RecordLevel.FULL: self.TRIs.append(TRI_latest)
 
     def atomic_train_a_model(self,setup:dict,record_level, hyper:HyperParameters, batch: BatchRunner, epochs):  # ATAM is short for  -->atomic_train_a_model
-        seed_to_use = setup.get("seed") # guranteed to have seed
+        seed_to_use = setup.get("seed") # guaranteed to have seed
         set_seed(seed_to_use)
         training_data = instantiate_arena(setup["arena"], hyper.training_set_size)  # Passed to base_gladiator through TRI
         set_seed(seed_to_use)  # Reset seed as it likely was used in training_data
@@ -53,86 +53,6 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
 
         #record_results(TRI, batch_id, run_id)  # Store Config for this model #TODO make use of RecordLevel
         return TRI
-
-    def learning_rate_sweepDELETEME(self, setup, batch):
-        """
-        Bidirectional sweep: test upward from 1e-6 to 1.0, then downward from 1e-6 to 1e-15.
-        Stops early if no improvement after `patience` trials in each phase.
-        Returns the best learning rate found.
-        """
-        start_lr = 1e-6
-        min_lr = 1e-15
-        max_lr = 1.0
-        max_trials = 20
-        patience = 3
-
-        best_error = float("inf")
-        best_lr = None
-        trials = 0
-
-        print(f"\t😈😈 Welcome to the Learning Rate Sweep. Because setting learning rate manually stinks 😈😈")
-
-        # ═══ Phase 1: Upward sweep (1e-6 → 1.0) ═══
-        lr = start_lr
-        factor = 10
-        no_improve_count = 0
-
-        while lr <= max_lr and trials < max_trials:
-            setup["learning_rate"] = lr
-            TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
-            error = TRI.mae
-            print(f"Conv={TRI.converge_cond}")
-            print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
-            trials += 1
-
-            # Check for gradient explosion - stop upward phase
-            if error is None or error > 1e20:
-                break
-
-            # Track best
-            if error < best_error:
-                best_error = error
-                best_lr = lr
-                no_improve_count = 0
-            else:
-                no_improve_count += 1
-
-            if no_improve_count >= patience:
-                break
-
-            lr *= factor
-
-        # ═══ Phase 2: Downward sweep (1e-6 → 1e-15) ═══
-        lr = start_lr
-        factor = 0.1
-        no_improve_count = 0  # Reset patience for phase 2
-
-        while lr >= min_lr and trials < max_trials:
-            setup["learning_rate"] = lr
-            TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
-            error = TRI.mae
-            print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
-            trials += 1
-
-            # Gradient explosion less likely at tiny LRs, but check anyway
-            if error is None or error > 1e20:
-                break
-
-            # Track best
-            if error < best_error:
-                best_error = error
-                best_lr = lr
-                no_improve_count = 0
-            else:
-                no_improve_count += 1
-
-            if no_improve_count >= patience:
-                break
-
-            lr *= factor
-
-        print(f"\t😈\t🏆🏆🏆 Best learning_rate = {best_lr:.1e} (best error = {best_error:.5f}) 🏆🏆🏆\n")
-        return best_lr
 
     # NeuroEngine.py, learning_rate_sweep
     def learning_rate_sweep(self, setup, batch):

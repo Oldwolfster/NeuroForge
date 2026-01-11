@@ -1,3 +1,6 @@
+from src.NNA.legos.Activation import *
+from src.NNA.legos.Loss import *
+from src.NNA.legos.Optimizer import *
 from src.NNA.utils.RamDB import RamDB
 from pathlib import Path
 
@@ -7,8 +10,8 @@ class HyperParameters():
         # BATTLE Parameters are set here                           #
         ############################################################
 
-        self.epochs_to_run           : int   = 8     # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 20        # Qty of training data
+        self.epochs_to_run           : int   = 20        # Number of times training run will cycle through all training data
+        self.training_set_size       : int   = 12        # Qty of training data
         self.random_seed             : int   = 181467    #181467 #580636    # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
         self.seed_replicates         : int   = 3         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
@@ -41,13 +44,12 @@ class HyperParameters():
 
 
         self.dimensions = {
-            # "loss_function": [Loss_MSE, Loss_BCE, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
-            # "hidden_activation": [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
-            # "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
+             "loss_function": [Loss_MSE, Loss_BCE]#, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
+            # "hidden_activation": [Activation_Tanh, Activation_Sigmoid]#, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
             # "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
             # "initializer": "*",
             #"architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
-            "architecture": [[2,2, 1]],
+            #"architecture": [[4,4,1],],                             #[1]],
             #"output_activation": [Activation_NoDamnFunction]
             #"seed":[1,2,3],
             #"loss":  Loss_HalfWit,
@@ -55,7 +57,20 @@ class HyperParameters():
             # "batch_size": [1, 2, 4, 8, 999]
         }
 
+        self.dimensions = {
+             "loss_function": [Loss_MSE, Loss_BCE, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
+             "hidden_activation": [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
+             "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction],
+             "initializer": "*",
+            "architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
+            "output_activation": [Activation_NoDamnFunction],
+            "seed":[1,2,3],
+            "loss":  Loss_HalfWit,
+            "optimizer": [Optimizer_SGD, Optimizer_Adam],
+             "batch_size": [1, 2, 4, 8, 999]
+        }
 
+        self.dimensions = {    "architecture": [[2, 5, 1], [2, 2, 1]], "optimizer": [ Optimizer_Nadam]}#Optimizer_SGD
 
 
         ############################################################
@@ -72,16 +87,16 @@ class HyperParameters():
         self.db_dsk: RamDB = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
 
 
-        self.arenas = ['RepaymentFromCreditScore']
-        #self.arenas = ['CarValueFromMiles']
+        #self.arenas = ['RepaymentFromCreditScore']
+        self.arenas = ['CarValueFromMiles']
         #self.arenas = ['Titanic8']
         self.gladiators=['AutoForge','AutoForgeDup'] #,'TitanicOpus']
-        self.gladiators = ['AutoForge']  # ,'TitanicOpus']
+        self.gladiators = ['AutoForgeDup']  # ,'TitanicOpus']
 
     """
 Cleanup list
 MAYBE EARLY STOPPING
-RENAME ERROR SIGNAL TO ACCEPTED_BLAME
+DONE RENAME ERROR SIGNAL TO ACCEPTED_BLAME
     1) Several popups need to be added
     3) DONE Thresholder visualization
     4) DONE Speed and jump to epoch controls

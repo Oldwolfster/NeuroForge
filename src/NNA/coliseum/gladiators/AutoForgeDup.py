@@ -1,12 +1,12 @@
 import math
 from typing import Tuple
 
-from src.NNA.Legos.Activation import *
+from src.NNA.legos.Activation import *
 from src.NNA.engine.BaseGladiator import Gladiator
-from src.NNA.Legos.Initializer import *
-from src.NNA.Legos.Loss import *
-from src.NNA.Legos.Scaler import *
-from src.NNA.Legos.Optimizer import *
+from src.NNA.legos.Initializer import *
+from src.NNA.legos.Loss import *
+from src.NNA.legos.Scaler import *
+from src.NNA.legos.Optimizer import *
 from src.NNA.engine.Config import Config
 from src.NNA.engine.Neuron import Neuron
 
@@ -20,47 +20,42 @@ class AutoForge_TEMPLATE(Gladiator):
         """
 
     def configure_model(self, config: Config):
-        """ 👉  Anything prior to initializing neurons goes here
-            💪  For example setting config options.        """
-
-
-        config.optimizer                = Optimizer_SGD
-        config.learning_rate           = 0.1
-        config.architecture            = [2,1]
-        config.weight_initializer      = Initializer_He
-        #config.hidden_activation       = Activation_Tanh
-        #config.output_activation       = Activation_NoDamnFunction
-        #config.loss_function           = Loss_HalfWit
-        #config.batch_size              = 1
-        #config.roi_mode                = ROI_Mode.MOST_ACCURATE    #SWEET_SPOT(Default), ECONOMIC or MOST_ACCURATE
-        #config.input_scalers           = Scaler_NONE                                 # All inputs same scaler
-        #config.input_scalers           = [Scaler_MinMax, Scaler_MinMax, Scaler_MinMax, Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax, Scaler_Robust]
-        #config.target_scaler           = Scaler_NONE #Scaler_NONE # Scaler_MinMax
-        """config.input_scalers = [
-            Scaler_MinMax,  # Pclass
-            Scaler_NONE,  # Sex already 0 and 1
-            Scaler_MinMax,  # Age
-            Scaler_MinMax,  # SibSp # prob robust
-            Scaler_MinMax,  # Parch # Scaler_Robust
-            Scaler_LogMinMax,  # Fare - will switch to Scaler_LogMinMax
-            Scaler_NONE,  # Embarked_S - one hot encoded
-            Scaler_NONE,  # Embarked_C - one hot encoded
-            Scaler_NONE  # Embarked_Q - one hot encoded
-        ]
-         GBS Gospel
-        config.input_scalers = [
-            Scaler_MinMax,  # Pclass
-            Scaler_NONE,  # Sex already 0 and 1
-            Scaler_MinMax,  # Age
-            Scaler_MinMax,  # SibSp # prob robust
-            Scaler_MinMax,  # Parch # Scaler_Robust
-            Scaler_LogMinMax,  # Fare - will switch to Scaler_LogMinMax
-            Scaler_NONE,  # Embarked_S - one hot encoded
-            Scaler_NONE,  # Embarked_C - one hot encoded
-            Scaler_NONE  # Embarked_Q - one hot encoded
-        ]
         """
-                                         # Target scaling
+        Optimized for the new 10-5-1 Architecture and 'Fat Tail' features.
+        """
+
+        #config.architecture = [2,1, 1]
+        config.optimizer = Optimizer_SGD  # The "Turbo Start" version
+
+        # We let the LR Sweep handle the aggressive start of NoHat
+        #config.lr_specified = False
+
+        # Kaiming (He) is mathematically the right partner for Leaky/ReLU
+        config.weight_initializer = Initializer_He
+
+        # LogCosh is great for regression, but if we are doing Titanic (Binary),
+        # we need to be careful. I'll stick with your LogCosh play for the 'Smoothness' test.
+        #config.loss_function = Loss_LogCosh2
+
+        #config.batch_size = 7
+
+        # MIX AND MATCH SCALERS:
+        # Applying the "Math + Domain" logic we discussed.
+        config.input_scalers = [
+            Scaler_MinMax,  # Pclass (1, 2, 3) - Linear is fine
+            Scaler_NONE,  # Sex (0, 1) - Already bounded
+            Scaler_Robust,  # Age - Handles the 'old' outliers without crushing the 'young'
+            Scaler_MinMax,  # SibSp - Small range (0-8), linear is fine
+            Scaler_MinMax,  # Parch - Small range (0-6), linear is fine
+            Scaler_LogMinMax,  # Fare - THE LOG PLAY. Squashes the luxury fares into the signal.
+            Scaler_NONE,  # Embarked_S - One-hot
+            Scaler_NONE,  # Embarked_C - One-hot
+            Scaler_NONE  # Embarked_Q - One-hot
+        ]
+
+        # Target Scaler: If using LogCosh or MSE, MinMax on the target
+        # helps keep the 'Blame' (gradient) within a predictable range.
+        config.target_scaler = Scaler_MinMax
     """
     Between the above and the below, the following occurs:
         1) Config smart-defaults are set for anything not specified.
@@ -70,8 +65,7 @@ class AutoForge_TEMPLATE(Gladiator):
     def customize_neurons(self, config: Config):
         """ 🚀 Anything after initializing neurons
             🐉 but before training goes here  i.e manually setting a weight  """
-        #Neuron.output_neuron.set_activation(Activation_NoDamnFunction)  #How to change a neurons activation initialization occured
-        #config.db.query_print("SELECT * FROM  Neuron LIMIT 1")
+
 
     # 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹
     # 🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹  RECOMMENDED FUNCTIONS TO CUSTOMIZE  🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹🔹

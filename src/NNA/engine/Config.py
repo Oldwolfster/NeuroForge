@@ -1,9 +1,9 @@
-from src.NNA.Legos.Activation import *
-from src.NNA.Legos.Initializer import *
-from src.NNA.Legos.Loss import *
-from src.NNA.Legos.Optimizer import *
-from src.NNA.Legos.Scaler import *
-from src.NNA.Legos._LegoAutoML import LegoAutoML
+from src.NNA.legos.Activation import *
+from src.NNA.legos.Initializer import *
+from src.NNA.legos.Loss import *
+from src.NNA.legos.Optimizer import *
+from src.NNA.legos.Scaler import *
+from src.NNA.legos._LegoAutoML import LegoAutoML
 
 
 
@@ -44,6 +44,25 @@ class Config:
     def update_from_batch_sweep(self, setup):
         for key, value in setup.items():    # Loop through dimensions dictionary.
             if value is not None and hasattr(self, key): setattr(self, key, value)  # only update attribute if it exists
+
+    def update_from_batch_sweep(self, setup):
+        for key, value in setup.items():
+            if value is not None and hasattr(self, key):
+                # Deserialize string back to actual Lego instance
+                deserialized_value = self.deserialize_lego(value)
+                setattr(self, key, deserialized_value)
+
+    def deserialize_lego(self, value):
+        """Convert serialized Lego string back to instance."""
+        if not isinstance(value, str):
+            return value  # Already deserialized
+
+        # Try to find matching Lego instance in imported modules
+        try:
+            return globals()[value]  # Look up by name in global scope
+        except KeyError:
+            return value  # Return as-is if not found
+
 
     def finish_setup(self):
         #TODO WHY IS THIS NOT WORKING  AND WHY DID WE NEED IT?  I KNOW WE DID... self.optimizer.config = self

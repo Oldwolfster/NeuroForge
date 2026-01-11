@@ -1,7 +1,7 @@
 #from src.NNA.engine.Neuron   import Neuron
 import math
 
-from src.NNA.Legos.Activation import *
+from src.NNA.legos.Activation import *
 
 
 def _get_n(y_true):
@@ -307,6 +307,56 @@ Loss_LogCosh = StrategyLossFunction(
     best_for           = "Situations where you want a 'proportional' nudge for small errors so the model can land precisely, but a 'capped' nudge for huge errors so outliers don't break the model.",
     allowed_activations= [Activation_NoDamnFunction, Activation_Tanh, Activation_ReLU, Activation_LeakyReLU],
     derivative_formula = "tanh(prediction - target) / n"
+)
+
+
+# 🔹 Log-Cosh Loss
+def logcosh2_loss(y_pred, y_true):
+    """
+    Computes the Log-Cosh loss.
+    Using the stable approximation: log(cosh(x)) ≈ |x| - log(2) for large x.
+    """
+    n = _get_n(y_true)
+    preds = y_pred if n > 1 else [y_pred]
+    trues = y_true if n > 1 else [y_true]
+
+    vals = []
+    for p, t in zip(preds, trues):
+        x = p - t
+        # Numerical stability hack:
+        # If x is large, cosh(x) overflows, but log(cosh(x)) is just |x| - log(2)
+        if abs(x) > 100:
+            vals.append(abs(x) - math.log(2))
+        else:
+            vals.append(math.log(math.cosh(x)))
+
+    return sum(vals) / n
+
+
+def logcosh2_derivative(y_pred, y_true):
+    """
+    Computes the derivative of the Log-Cosh loss.
+    Luckily, tanh(x) is naturally stable (it caps at 1.0 or -1.0).
+    """
+    n = _get_n(y_true)
+    preds = y_pred if n > 1 else [y_pred]
+    trues = y_true if n > 1 else [y_true]
+
+    # math.tanh never overflows! It just saturates at 1.0.
+    grads = [math.tanh(p - t) / n for p, t in zip(preds, trues)]
+    return grads if n > 1 else grads[0]
+
+
+Loss_LogCosh2 = StrategyLossFunction(
+    loss=logcosh_loss,
+    derivative=logcosh_derivative,
+    name="Log-Cosh Loss",
+    short_name="LCL",
+    desc="Safe from outliers like MAE but able to converge precisely like MSE",
+    when_to_use="Regression with messy data. You want the speed of MSE but the safety of MAE.",
+    best_for="Situations where you want a 'proportional' nudge for small errors, but a 'capped' nudge for huge errors.",
+    allowed_activations=[Activation_NoDamnFunction, Activation_Tanh, Activation_ReLU, Activation_LeakyReLU],
+    derivative_formula="tanh(prediction - target) / n"
 )
 
 # 🔹 **Huber Loss**

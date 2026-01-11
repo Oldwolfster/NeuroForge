@@ -47,7 +47,7 @@ class VCR:
 
                 self.TRI.db.add(
                     neuron,
-                    exclude_keys={"activation", "learning_rate", "weights", "weights_before"},
+                    exclude_keys={"optimizer_state","activation", "learning_rate", "weights", "weights_before"},
                     run_id=self.TRI.run_id,
                     epoch=record_sample.epoch,
                     sample_id=record_sample.sample_id
@@ -62,7 +62,8 @@ class VCR:
     def finish_epoch(self, epoch: int):
         """End of epoch — flush optimizer buffer, record stats"""
         # Flush any remaining optimizer data
-        self.TRI.config.optimizer.flush(self.TRI)
+        #self.TRI.config.optimizer.flush(self.TRI)
+        self.TRI.vcr_nna.flush()
 
         self.TRI.last_epoch = epoch
         mae = self.abs_error_for_epoch / self.TRI.training_data.sample_count

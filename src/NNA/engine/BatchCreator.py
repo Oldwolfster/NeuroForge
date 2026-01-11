@@ -1,6 +1,6 @@
 from src.ArenaSettings import HyperParameters
 import random
-from src.NNA.Legos._LegoWildCard import LegoLoader
+from src.NNA.legos._LegoWildCard import LegoLoader
 from pathlib import Path
 from itertools import product
 
@@ -49,7 +49,7 @@ class BatchCreator:
     # BatchCreator.py
 
     def expand_wildcards(self, dimensions: dict[str, list]) -> dict[str, list]:
-        """Expand '*' wildcards to all available Legos"""
+        """Expand '*' wildcards to all available legos"""
         loader = LegoLoader()
         expanded = {}
         for key, values in dimensions.items():
@@ -205,8 +205,6 @@ class BatchCreator:
         # Non-lego dimensions
         "seed", "architecture", "batch_size", "learning_rate",
     }
-
-    # BatchCreator.py
 
     def validate_dimensions(self, dimensions: dict) -> dict:
         """Validate keys, normalize single values to lists, check lego types"""

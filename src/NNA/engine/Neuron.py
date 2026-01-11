@@ -1,4 +1,4 @@
-from src.NNA.Legos.Activation import Activation_NoDamnFunction, StrategyActivation
+from src.NNA.legos.Activation import Activation_NoDamnFunction, StrategyActivation
 
 
 class Neuron:
@@ -18,8 +18,6 @@ class Neuron:
 
         # Per-weight state
         self.learning_rates = [learning_rate] * len(self.weights)
-        #self.m = [0.0] * len(self.weights)  # Adam momentum
-        #self.v = [0.0] * len(self.weights)  # Adam variance
         self.accumulated_leverage = [0.0] * len(self.weights)
         #self.t = 0  # Timestep counter for optimizer
 
@@ -28,7 +26,7 @@ class Neuron:
         self.raw_sum                = 0.0
         self.activation_value       = 0.0
         self.activation_gradient    = 0.0
-        self.accepted_blame           = 0.0
+        self.accepted_blame         = 0.0
 
         # Register in class collections
         Neuron.neurons.append(self)

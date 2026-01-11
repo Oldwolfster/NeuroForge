@@ -85,7 +85,7 @@ class ArchitecturePopup(Popup_Base):
         def describe(TRI):
             cfg = TRI.config
             describe_rows = [
-                TRI.gladiator,  # Training Setup header, no value
+                self.get_model_name(TRI),
                 architecture(cfg.architecture),
                 cfg.weight_initializer.name,
                 hidden_activation(cfg.architecture, cfg.hidden_activation.name),
@@ -132,3 +132,13 @@ class ArchitecturePopup(Popup_Base):
         #rows = [[group, label] + [safe_describe(cfg)[i] for cfg in configs] for i, (group, label) in enumerate(labels)]
         return [list(col) for col in zip(*rows)]
 
+
+    def get_model_name(self, TRI):
+        """Get model name with numbering if duplicates exist."""
+        optimizer_counts = {}
+        for tri in Const.TRIs:
+            name = tri.gladiator
+            optimizer_counts[name] = optimizer_counts.get(name, 0) + 1
+
+        needs_number = optimizer_counts[TRI.gladiator] > 1
+        return f"{beautify_text(TRI.gladiator)} {TRI.run_id}" if needs_number else beautify_text(TRI.gladiator)

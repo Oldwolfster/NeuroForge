@@ -1,5 +1,5 @@
-from src.NNA.Legos.Activation import Activation_NoDamnFunction
-from src.NNA.Legos.Initializer import Initializer_Tiny
+from src.NNA.legos.Activation import Activation_NoDamnFunction
+from src.NNA.legos.Initializer import Initializer_Tiny
 from src.NNA.engine.Neuron import Neuron
 from src.NNA.utils.RamDB import RamDB
 from src.NNA.engine.RecordSample import RecordSample
@@ -67,6 +67,20 @@ def prep_RamDB():
             value REAL NOT NULL,            
             PRIMARY KEY (run_id, epoch, sample, nid, weight_id)       
         );""")
+
+    arg_columns = ", ".join([f"arg_{i} REAL" for i in range(1, 21)])
+    sql_for_weights= f"""
+        CREATE TABLE IF NOT EXISTS WeightAdjustments (
+            run_id      INTEGER,
+            epoch       INTEGER,
+            sample_id   INTEGER,
+            nid         INTEGER,
+            weight_id   INTEGER,
+            {arg_columns}
+        )
+        """
+    db.execute(sql_for_weights)
+
 
     db.execute("""
         CREATE TABLE IF NOT EXISTS ErrorSignalCalcs (

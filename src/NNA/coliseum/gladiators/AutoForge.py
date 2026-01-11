@@ -1,12 +1,12 @@
 import math
 from typing import Tuple
 
-from src.NNA.Legos.Activation import *
+from src.NNA.legos.Activation import *
 from src.NNA.engine.BaseGladiator import Gladiator
-from src.NNA.Legos.Initializer import *
-from src.NNA.Legos.Loss import *
-from src.NNA.Legos.Scaler import *
-from src.NNA.Legos.Optimizer import *
+from src.NNA.legos.Initializer import *
+from src.NNA.legos.Loss import *
+from src.NNA.legos.Scaler import *
+from src.NNA.legos.Optimizer import *
 from src.NNA.engine.Config import Config
 from src.NNA.engine.Neuron import Neuron
 
@@ -14,7 +14,6 @@ from src.NNA.engine.Neuron import Neuron
 class AutoForge_TEMPLATE(Gladiator):
     """ AutoForge -  A ⚡imple Yet Powerful Neural Network ⚡
         ✅ Auto-tuned learning rate
-        ✅ Supports multiple activation functions
         ✅ Flexible architecture with preconfigured alternatives
         🛡️ If you are having problems, comment everything out and try the 'smart defaults'
         """
@@ -23,14 +22,14 @@ class AutoForge_TEMPLATE(Gladiator):
         """ 👉  Anything prior to initializing neurons goes here
             💪  For example setting config options.        """
 
-        config.architecture            = [3,2,1]
-        config.optimizer                = Optimizer_SGD
+        config.architecture            = [10,5,1]
+        config.optimizer                = Optimizer_Adam_NoHat
         #config.learning_rate           = 0.01
-        #config.weight_initializer      = Initializer_He
+        config.weight_initializer      = Initializer_He
         #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_NoDamnFunction
-        #config.loss_function           = Loss_HalfWit
-        config.batch_size              = 2
+        config.loss_function           = Loss_LogCosh
+        config.batch_size              = 7
         #config.roi_mode                = ROI_Mode.MOST_ACCURATE    #SWEET_SPOT(Default), ECONOMIC or MOST_ACCURATE
         #config.input_scalers           = Scaler_NONE                                 # All inputs same scaler
         #config.input_scalers           = [Scaler_MinMax, Scaler_MinMax, Scaler_MinMax, Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax, Scaler_Robust]
