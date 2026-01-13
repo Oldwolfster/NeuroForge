@@ -454,7 +454,7 @@ class RamDB:
         perm_conn.commit()
         perm_conn.close()
 
-    def get_perm_db_connection(self, db_name='arena_history.db', subfolder='history'):
+    def get_perm_db_connection(self, db_name, subfolder='history'):
         """
         Connects to an SQLite database located in the specified subfolder within the parent directory of this script.
         If the subfolder does not exist, it is created.

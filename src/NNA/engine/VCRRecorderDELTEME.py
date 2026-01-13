@@ -26,6 +26,39 @@ class VCR:
         self.convergence_signal     = None      # Will be set by convergence detector
         self.backpass_finalize_info = []
 
+    def record_sample(self, record_sample: RecordSample, layers: List[List[Neuron]]):
+        """Record sample data — optimizer handles its own weight update logging now"""
+        self.abs_error_for_epoch += abs(record_sample.error_unscaled)
+        if record_sample.is_true is True:
+            self.bd_correct += 1
+
+        if not self.TRI.should_record(RecordLevel.FULL):
+            return
+
+        self.TRI.db.add(record_sample)
+
+        for layer_index, layer in enumerate(layers):
+            for neuron in layer:
+                if layer_index == 0:
+                    raw_inputs = json.loads(record_sample.inputs)
+                    neuron.neuron_inputs = [1.0] + raw_inputs
+                else:
+                    previous_layer = layers[layer_index - 1]
+                    neuron.neuron_inputs = [1.0] + [prev.activation_value for prev in previous_layer]
+
+                self.TRI.db.add(
+                    neuron,
+                    exclude_keys={"optimizer_state","activation", "learning_rate", "weights", "weights_before"},
+                    run_id=self.TRI.run_id,
+                    epoch=record_sample.epoch,
+                    sample_id=record_sample.sample_id
+                )
+
+        self.bulk_insert_weights(
+            run_id=self.TRI.run_id,
+            epoch=record_sample.epoch,
+            sample=record_sample.sample_id
+        )
 
     def finish_epoch(self, epoch: int):
         """End of epoch — flush optimizer buffer, record stats"""
@@ -134,49 +167,3 @@ class VCR:
         for i in range(5, len(sample_row)):
             arg_op_placeholders.append("CAST(? AS REAL)")  # arg
         return ", ".join(base_placeholders + arg_op_placeholders)
-
-    def record_blame_calculations(self, blame_calculations):
-        """
-        Inserts all backprop calculations for the current sample into the database.
-        """
-
-        #print("********  Distribute Error Calcs************")
-        #for row in self.blame_calculations:
-        #    print(row)
-        if not self.TRI.should_record(RecordLevel.FULL ): return
-        sql = """
-        INSERT INTO ErrorSignalCalcs
-        (epoch, sample, run_id, nid, weight_id, 
-         arg_1, op_1, arg_2, op_2, arg_3, op_3, result)
-        VALUES 
-        (?, ?, ?, ?, ?, 
-         CAST(? AS REAL), ?, 
-         CAST(? AS REAL), ?, 
-         CAST(? AS REAL), ?, 
-         CAST(? AS REAL))
-        """
-
-        # Convert each row to ensure any numpy scalars are native Python types
-        converted_rows = [self.convert_numpy_scalars_because_python_is_shit(row) for row in blame_calculations]
-        #print(f"BLAME {self.blame_calculations}")
-
-        #Heads up, sometimes overflow error look like key violation here
-
-        self.TRI.db.executemany(sql, blame_calculations, "error signal")
-        blame_calculations.clear()
-
-    def bulk_insert_weights(self,run_id, epoch, sample):
-        """
-        Collects all weight values across neurons and creates a bulk insert SQL statement.
-        """
-        sql_statements = []
-        for layer in Neuron.layers:
-            for neuron in layer:
-                for weight_id, (prev_weight, weight) in enumerate(zip(neuron.weights_before, neuron.weights)):
-                    sql_statements.append(
-                        f"({run_id}, {epoch}, {sample}, {neuron.nid}, {weight_id}, {prev_weight}, {weight})"
-                    )
-
-        if sql_statements:
-            sql_query = f"INSERT INTO Weight (run_id, epoch, sample, nid, weight_id, value_before, value) VALUES {', '.join(sql_statements)};"
-            self.db.execute(sql_query, "Weight")

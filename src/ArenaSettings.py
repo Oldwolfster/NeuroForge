@@ -32,12 +32,6 @@ class HyperParameters():
 
         # RMSprop / Adadelta
         self.rmsprop_beta           : float = 0.9           # Decay rate for moving average
-
-        # Simplex
-        self.simplex_growth_rate    : float = 1.05          # LR multiplier when stable
-        self.simplex_decay_rate     : float = 0.5           # LR multiplier on explosion
-        self.simplex_threshold      : float = None          # None = auto (input_max * 5)
-
         # Momentum
         self.momentum_beta          : float = 0.9           # Momentum coefficient
 
@@ -70,7 +64,7 @@ class HyperParameters():
              "batch_size": [1, 2, 4, 8, 999]
         }
 
-        self.dimensions = {    "architecture": [[2, 5, 1], [2, 2, 1]], "optimizer": [ Optimizer_Nadam]}#Optimizer_SGD
+        self.dimensions = {    "architecture": [ [1]], "optimizer": [ Optimizer_SGD]}#Optimizer_SGD
 
 
         ############################################################

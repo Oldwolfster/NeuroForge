@@ -82,7 +82,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
         while lr <= max_lr and trials < max_trials:
             setup["learning_rate"] = lr
             TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
-            error = TRI.mae
+            error = TRI.last_mae
             print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
             # print(f"Conv={TRI.converge_cond}")
             trials += 1
@@ -113,7 +113,7 @@ class NeuroEngine:   # Note: one different standard than PEP8... we align code v
         while lr >= min_lr and trials < max_trials:
             setup["learning_rate"] = lr
             TRI = self.atomic_train_a_model(setup, RecordLevel.NONE, self.hyper, batch, epochs=20)
-            error = TRI.mae
+            error = TRI.last_mae
             print(f"\t😈\tLR:{lr:.1e} → Error:{error}")
             print(f"Conv={TRI.converge_cond}")
             trials += 1

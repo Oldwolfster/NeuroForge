@@ -21,12 +21,12 @@ class DisplayModel__NeuronScalerPrediction:
     ROW_SPACING = 1.15
     TOP_OFFSET = 35
     OVERHANG = 24
-    HEIGHT_PADDING = 459
+    HEIGHT_PADDING = 59
 
     def __init__(self, neuron):
         self.neuron = neuron
-        output_nid  = neuron.nid-1
-        #self.neuron.location_top = self.neuron.model.neurons[output_nid].location_top
+        self.neuron.location_top        = 39
+
         if self.has_scaling():
             self.ROW_SPACING = 1.69
         else:

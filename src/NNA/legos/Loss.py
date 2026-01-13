@@ -534,7 +534,7 @@ Loss_Focal = StrategyLossFunction(
 )
 
 
-# 🔹 **Half Wit Error**
+# 🔹 **Half Wit Loss**
 def half_wit_loss(y_pred, y_true):
     """Fifty-five million reasons not to trust loss values."""
     return -55_555_555.404

@@ -46,7 +46,7 @@ class StrategyOptimizer:
         batch_details                   = self.gather_batch_details(neuron, weight_id, sample, TRI)
         self.check_for_adjustment       ( neuron, weight_id, sample, TRI, popup_dict)  # Delegate boundary check and recording
         final_dict                      = self.add_fields_to_dict  (neuron, weight_id, sample, TRI , popup_dict, leverage_details, batch_details)
-        TRI.vcr_nna                     . record_weight_update(final_dict)
+        TRI.vcr_nna                     . record_optimizer_logic(final_dict)
 
     def gather_leverage_details(self, neuron, weight_id):
         """Calculate per-sample leverage details once, return dict"""
@@ -176,8 +176,6 @@ Optimizer_SGD = StrategyOptimizer(
     best_for="Manual tuning, simple models, or teaching tools.",
     fn_popup_info=sgd_popup_info,
     fn_adj_calc=sgd_calculate_adjustment,
-    # Optional for Adam -> state_per_weight=["m", "v"],
-    # Optional for Adam -> state_per_neuron=["t"],
 )
 
 
@@ -239,6 +237,10 @@ Optimizer_Adam = StrategyOptimizer(
     fn_adj_calc=adam_calculate_adjustment,
     state_per_weight=["m", "v"],  # ← Adam needs momentum and velocity per weight
     popup_formula="3"
+    #m: Exponential moving average of the gradient (smoothed direction / “momentum” term).
+    #v: Exponential moving average of the squared gradient (smoothed magnitude / scaling term).
+    #m_hat: Bias-corrected m (corrects the early underestimate from starting at zero).
+    #v_hat: Bias-corrected v (corrects the early underestimate from starting at zero).
 )
 
 
@@ -376,9 +378,525 @@ Optimizer_Nadam = StrategyOptimizer(
     state_per_weight=["m", "v", "m_lookahead"],
     popup_formula="test1"
 )
-def my_custom_optimizer_calc(neuron, weight_id, TRI, avg_leverage):
-    # print(f"Timestep: {TRI.timestep}")
-    # print(f"Avg Leverage: {avg_leverage}")
-    # print(f"LR: {neuron.learning_rates[weight_id]}")
-    ...
+
+# ==============================================================================
+# ADAM OPTIMIZER
+# ==============================================================================
+
+
+
+def rmsprop_popup_info(neuron, weight_id, TRI):
+    """Calculate RMSprop state for display. Return display values."""
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state
+    timestep    = TRI.timestep                              # Get current state
+    epsilon     = 1e-8                                      # RMSprop hyperparameters
+
+    sqrt_v      = math.sqrt(v)
+    lr          = neuron.learning_rates[weight_id]
+    scaled_lr   = lr / (sqrt_v + epsilon)                   # Show the scaling
+
+    return {
+        "v": v,
+        "sqrt(v)": sqrt_v,
+        "Scaled LR": scaled_lr,
+        "timestep": timestep,
+    }
+
+
+def rmsprop_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """RMSprop: Scales learning rate by moving average of squared gradients."""
+
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state
+    beta        = 0.9                                       # RMSprop hyperparameters
+    epsilon     = 1e-8                                      # RMSprop hyperparameters
+
+    # Update moving average of squared gradients
+    v = beta * v + (1 - beta) * (avg_leverage ** 2)
+
+    # Save updated state
+    neuron.optimizer_state['v'][weight_id] = v
+
+    # Calculate adjustment
+    lr          = neuron.learning_rates[weight_id]
+    adjustment  = lr * avg_leverage / (math.sqrt(v) + epsilon)
+
+    return adjustment
+
+
+Optimizer_RMSprop = StrategyOptimizer(
+    name="RMSprop",
+    desc="Root Mean Square Propagation - scales learning rate by moving average of squared gradients.",
+    when_to_use="Good for RNNs and non-stationary objectives; handles noisy gradients well.",
+    best_for="Recurrent networks, time-series problems, or when gradients vary widely.",
+    fn_popup_info=rmsprop_popup_info,
+    fn_adj_calc=rmsprop_calculate_adjustment,
+    state_per_weight=["v"],  # ← RMSprop needs only v per weight
+)
+
+
+
+
+def momentum_popup_info(neuron, weight_id, TRI):
+    """Calculate Momentum state for display. Return display values."""
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    timestep    = TRI.timestep                              # Get current state
+
+    lr          = neuron.learning_rates[weight_id]
+    scaled_lr   = lr * m                                    # effective adjustment rate
+
+    return {
+        "velocity": m,
+        "Scaled LR": scaled_lr,
+        "timestep": timestep,
+    }
+
+
+def momentum_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    Momentum: Accumulates velocity (exponential moving average of gradients).
+    Helps accelerate in consistent directions and dampen oscillations.
+    """
+
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    beta        = 0.9                                       # Momentum hyperparameters
+
+    # Update velocity (exponential moving average of gradients)
+    m = beta * m + (1 - beta) * avg_leverage
+
+    # Save updated state
+    neuron.optimizer_state['m'][weight_id] = m
+
+    # Apply velocity to learning rate
+    lr          = neuron.learning_rates[weight_id]
+    adjustment  = lr * m
+
+    return adjustment
+
+
+Optimizer_Momentum = StrategyOptimizer(
+    name="Momentum",
+    desc="SGD with momentum - accumulates velocity to accelerate learning in consistent directions.",
+    when_to_use="When gradients are noisy but have consistent overall direction.",
+    best_for="Deep networks, image classification, avoiding local minima.",
+    fn_popup_info=momentum_popup_info,
+    fn_adj_calc=momentum_calculate_adjustment,
+    state_per_weight=["m"],  # ← Momentum needs velocity per weight
+)
+
+# ==============================================================================
+# ADAGRAD OPTIMIZER
+# ==============================================================================
+def adagrad_popup_info(neuron, weight_id, TRI):
+    """Calculate AdaGrad state for display. Return display values."""
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state (G)
+    timestep    = TRI.timestep                              # Get current state
+    epsilon     = 1e-8                                      # AdaGrad hyperparameters
+
+    sqrt_G      = math.sqrt(v)
+    lr          = neuron.learning_rates[weight_id]
+    scaled_lr   = lr / (sqrt_G + epsilon)                   # Effective learning rate (decreases over time)
+
+    return {
+        "G": v,
+        "sqrt(G)": sqrt_G,
+        "Scaled LR": scaled_lr,
+        "timestep": timestep,
+    }
+
+
+def adagrad_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    AdaGrad: Adapts learning rate based on cumulative squared gradients.
+    Learning rate decreases over time (good for sparse features).
+    """
+
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state (G)
+    epsilon     = 1e-8                                      # AdaGrad hyperparameters
+
+    # Accumulate squared gradients (no decay - this is key difference from RMSprop)
+    v += avg_leverage ** 2
+
+    # Save updated state
+    neuron.optimizer_state['v'][weight_id] = v
+
+    # Compute adjustment with decreasing effective learning rate
+    lr          = neuron.learning_rates[weight_id]
+    adjustment  = lr * avg_leverage / (math.sqrt(v) + epsilon)
+
+    return adjustment
+
+
+Optimizer_AdaGrad = StrategyOptimizer(
+    name="AdaGrad",
+    desc="Adaptive Gradient - accumulates all past squared gradients (learning rate decreases over time).",
+    when_to_use="Sparse features, NLP tasks, when different features need very different learning rates.",
+    best_for="Sparse data, word embeddings, when features have vastly different frequencies.",
+    fn_popup_info=adagrad_popup_info,
+    fn_adj_calc=adagrad_calculate_adjustment,
+    state_per_weight=["v"],  # ← AdaGrad needs G per weight
+)
+
+
+
+# ==============================================================================
+# ADAMW OPTIMIZER (Adam with Decoupled Weight Decay)
+# ==============================================================================
+
+
+
+def adamw_popup_info(neuron, weight_id, TRI):
+    """Calculate AdamW state for display. Return display values."""
+    m               = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v               = neuron.optimizer_state['v'][weight_id]    # Get current state
+    timestep        = TRI.timestep                              # Get current state
+    beta1           = 0.9                                       # AdamW hyperparameters
+    beta2           = 0.999                                     # AdamW hyperparameters
+    epsilon         = 1e-8                                      # AdamW hyperparameters
+    weight_decay    = 0.01                                      # AdamW hyperparameters
+
+    # Bias correction
+    m_hat           = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
+    v_hat           = v / (1 - beta2 ** timestep) if timestep > 0 else 0.0
+
+    lr              = neuron.learning_rates[weight_id]
+    scaled_lr       = lr / (math.sqrt(v_hat) + epsilon) if timestep > 0 else 0.0
+
+    # Current weight for decay calculation (matches your original logic)
+
+    current_weight = neuron.weights[weight_id ]
+
+    wd_contribution = lr * weight_decay * current_weight
+
+    return {
+        "m": m,
+        "v": v,
+        "m_hat": m_hat,
+        "v_hat": v_hat,
+        "Scaled LR": scaled_lr,
+        "WD": wd_contribution,
+        "timestep": timestep,
+    }
+
+
+def adamw_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    AdamW: Adam with decoupled weight decay.
+    Fixes issues with L2 regularization in original Adam.
+    Weight decay is applied directly to weights, not through gradients.
+    """
+
+    m               = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v               = neuron.optimizer_state['v'][weight_id]    # Get current state
+    timestep        = TRI.timestep                              # Get current state
+    beta1           = 0.9                                       # AdamW hyperparameters
+    beta2           = 0.999                                     # AdamW hyperparameters
+    epsilon         = 1e-8                                      # AdamW hyperparameters
+    weight_decay    = 0.01                                      # AdamW hyperparameters
+
+    # Update biased first moment (momentum)
+    m = beta1 * m + (1 - beta1) * avg_leverage
+
+    # Update biased second moment (variance)
+    v = beta2 * v + (1 - beta2) * (avg_leverage ** 2)
+
+    # Save updated state
+    neuron.optimizer_state['m'][weight_id] = m
+    neuron.optimizer_state['v'][weight_id] = v
+
+    # Bias correction
+    m_hat = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
+    v_hat = v / (1 - beta2 ** timestep) if timestep > 0 else 0.0
+
+    # Adam adjustment
+    lr              = neuron.learning_rates[weight_id]
+    adam_adjustment = lr * m_hat / (math.sqrt(v_hat) + epsilon) if timestep > 0 else 0.0
+
+    # Add decoupled weight decay (applied to weight, not gradient!)
+    current_weight = neuron.weights[weight_id]
+
+    weight_decay_adjustment = lr * weight_decay * current_weight
+
+    # Total adjustment = Adam part + weight decay part
+    adjustment = adam_adjustment + weight_decay_adjustment
+
+    return adjustment
+
+
+Optimizer_AdamW = StrategyOptimizer(
+    name="AdamW",
+    desc="Adam with decoupled Weight decay - fixes L2 regularization issues in Adam.",
+    when_to_use="When you need regularization with Adam; standard for transformers and modern NLP.",
+    best_for="Large models, transformers, when you need both adaptive learning and regularization.",
+    fn_popup_info=adamw_popup_info,
+    fn_adj_calc=adamw_calculate_adjustment,
+    state_per_weight=["m", "v"],  # ← AdamW needs momentum and velocity per weight
+)
+
+
+
+# ==============================================================================
+# ADADELTA OPTIMIZER (AdaGrad without learning rate!)
+# ==============================================================================
+
+
+# ==============================================================================
+# ADADELTA OPTIMIZER (AdaGrad without learning rate!)
+# ==============================================================================
+
+
+# ==============================================================================
+# ADADELTA OPTIMIZER (AdaGrad without learning rate!)
+# ==============================================================================
+
+def adadelta_popup_info(neuron, weight_id, TRI):
+    """Calculate Adadelta state for display. Return display values."""
+    v               = neuron.optimizer_state['v'][weight_id]    # Accumulated squared gradients
+    m               = neuron.optimizer_state['m'][weight_id]    # Accumulated squared updates
+    timestep        = TRI.timestep                              # Get current state
+    epsilon         = 1e-6                                      # Adadelta hyperparameters
+
+    rms_grad        = math.sqrt(v + epsilon)
+    rms_delta       = math.sqrt(m + epsilon)
+    adaptive_lr     = rms_delta / rms_grad
+
+    return {
+        "Grad²": v,
+        "Δ²": m,
+        "RMS(g)": rms_grad,
+        "RMS(Δ)": rms_delta,
+        "Adaptive LR": adaptive_lr,
+        "timestep": timestep,
+    }
+
+
+def adadelta_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    Adadelta: Extension of AdaGrad that doesn't require manual learning rate.
+    Uses moving average of squared gradients AND squared updates.
+    The 'lr' parameter is ignored - Adadelta is learning-rate-free!
+    """
+
+    m               = neuron.optimizer_state['m'][weight_id]    # Accumulated squared updates
+    v               = neuron.optimizer_state['v'][weight_id]    # Accumulated squared gradients
+    rho             = 0.95                                      # Adadelta hyperparameters
+    epsilon         = 1e-6                                      # Adadelta hyperparameters
+
+    # Update accumulated squared gradient
+    v = rho * v + (1 - rho) * (avg_leverage ** 2)
+
+    # Compute RMS of previous updates and current gradients
+    rms_delta = math.sqrt(m + epsilon)
+    rms_grad  = math.sqrt(v + epsilon)
+
+    # Compute adjustment (note: no learning rate!)
+    adjustment = (rms_delta / rms_grad) * avg_leverage
+
+    # Update accumulated squared updates
+    m = rho * m + (1 - rho) * (adjustment ** 2)
+
+    # Save updated state
+    neuron.optimizer_state['v'][weight_id] = v
+    neuron.optimizer_state['m'][weight_id] = m
+
+    return adjustment
+
+
+Optimizer_Adadelta = StrategyOptimizer(
+    name="Adadelta",
+    desc="Extension of AdaGrad that doesn't require manual learning rate - computes it automatically.",
+    when_to_use="When you want adaptive learning without tuning learning rate; no LR needed!",
+    best_for="When you want 'set and forget' training, RNNs, speech recognition.",
+    fn_popup_info=adadelta_popup_info,
+    fn_adj_calc=adadelta_calculate_adjustment,
+    state_per_weight=["m", "v"],  # ← Adadelta needs squared updates and squared gradients per weight
+)
+
+# ==============================================================================
+# ADAMAX OPTIMIZER (Adam variant using infinity norm)
+# ==============================================================================
+def adamax_popup_info(neuron, weight_id, TRI):
+    """Calculate AdaMax state for display. Return display values."""
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state (u_∞)
+    timestep    = TRI.timestep                              # Get current state
+    beta1       = 0.9                                       # AdaMax hyperparameters
+    epsilon     = 1e-8                                      # AdaMax hyperparameters
+
+    # Bias-corrected momentum
+    m_hat       = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
+
+    lr          = neuron.learning_rates[weight_id]
+    scaled_lr   = lr / (v + epsilon)
+
+    return {
+        "m": m,
+        "u_∞": v,
+        "timestep": timestep,
+        "m_hat": m_hat,
+        "Scaled LR": scaled_lr,
+    }
+
+
+def adamax_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    AdaMax: Variant of Adam based on infinity norm.
+    More stable than Adam for some problems, especially with sparse gradients.
+    """
+
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state (u_∞)
+    timestep    = TRI.timestep                              # Get current state
+    beta1       = 0.9                                       # AdaMax hyperparameters
+    beta2       = 0.999                                     # AdaMax hyperparameters
+    epsilon     = 1e-8                                      # AdaMax hyperparameters
+
+    # Update biased first moment (momentum)
+    m = beta1 * m + (1 - beta1) * avg_leverage
+
+    # Update infinity norm estimate (exponentially weighted max)
+    v = max(beta2 * v, abs(avg_leverage))
+
+    # Save updated state
+    neuron.optimizer_state['m'][weight_id] = m
+    neuron.optimizer_state['v'][weight_id] = v
+
+    # Compute bias-corrected momentum
+    m_hat = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
+
+    # Compute adjustment (note: v doesn't need bias correction for infinity norm)
+    lr          = neuron.learning_rates[weight_id]
+    adjustment  = lr * m_hat / (v + epsilon) if timestep > 0 else 0.0
+
+    return adjustment
+
+
+Optimizer_AdaMax = StrategyOptimizer(
+    name="AdaMax",
+    desc="Adam variant using infinity norm - more stable for sparse gradients than Adam.",
+    when_to_use="When Adam is unstable; good for embeddings and sparse features.",
+    best_for="NLP, sparse data, when Adam diverges or is unstable.",
+    fn_popup_info=adamax_popup_info,
+    fn_adj_calc=adamax_calculate_adjustment,
+    state_per_weight=["m", "v"],  # ← AdaMax needs momentum and infinity norm estimate per weight
+)
+
+
+
+# ==============================================================================
+# RADAM OPTIMIZER (Rectified Adam)
+# ==============================================================================
+
+def radam_popup_info(neuron, weight_id, TRI):
+    """Calculate RAdam state for display. Return display values."""
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state
+    timestep    = TRI.timestep                              # Get current state
+    beta1       = 0.9                                       # RAdam hyperparameters
+    beta2       = 0.999                                     # RAdam hyperparameters
+    epsilon     = 1e-8                                      # RAdam hyperparameters
+
+    if timestep <= 0:
+        return {
+            "m": m,
+            "v": v,
+            "m_hat": 0.0,
+            "v_hat": 0.0,
+            "rho_t": 0.0,
+            "r_t": 0.0,
+            "Scaled LR": 0.0,
+            "timestep": timestep,
+        }
+
+    # Bias correction
+    m_hat       = m / (1 - beta1 ** timestep)
+    v_hat       = v / (1 - beta2 ** timestep)
+
+    # RAdam rectification
+    rho_inf     = (2 / (1 - beta2)) - 1
+    beta2_t     = beta2 ** timestep
+    rho_t       = rho_inf - (2 * timestep * beta2_t) / (1 - beta2_t)
+
+    if rho_t > 4:
+        r_t = math.sqrt(
+            ((rho_t - 4) * (rho_t - 2) * rho_inf)
+            / ((rho_inf - 4) * (rho_inf - 2) * rho_t)
+        )
+        denom = (math.sqrt(v_hat) + epsilon)
+        lr    = neuron.learning_rates[weight_id]
+        scaled_lr = (lr * r_t) / denom
+    else:
+        r_t = 0.0
+        lr  = neuron.learning_rates[weight_id]
+        scaled_lr = lr  # In the unrectified regime, RAdam behaves like momentum SGD using m_hat
+
+    return {
+        "m": m,
+        "v": v,
+        "m_hat": m_hat,
+        "v_hat": v_hat,
+        "rho_t": rho_t,
+        "r_t": r_t,
+        "Scaled LR": scaled_lr,
+        "timestep": timestep,
+    }
+
+
+def radam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    RAdam: Rectified Adam.
+    Behaves like Adam, but "rectifies" the adaptive denominator early in training.
+    When there isn't enough reliable variance information yet, it falls back to a momentum-style step.
+    """
+
+    m           = neuron.optimizer_state['m'][weight_id]    # Get current state
+    v           = neuron.optimizer_state['v'][weight_id]    # Get current state
+    timestep    = TRI.timestep                              # Get current state
+    beta1       = 0.9                                       # RAdam hyperparameters
+    beta2       = 0.999                                     # RAdam hyperparameters
+    epsilon     = 1e-8                                      # RAdam hyperparameters
+
+    # Update moments
+    m = beta1 * m + (1 - beta1) * avg_leverage
+    v = beta2 * v + (1 - beta2) * (avg_leverage ** 2)
+
+    # Save updated state
+    neuron.optimizer_state['m'][weight_id] = m
+    neuron.optimizer_state['v'][weight_id] = v
+
+    if timestep <= 0:
+        return 0.0
+
+    # Bias correction
+    m_hat = m / (1 - beta1 ** timestep)
+
+    # RAdam rectification
+    rho_inf = (2 / (1 - beta2)) - 1
+    beta2_t = beta2 ** timestep
+    rho_t   = rho_inf - (2 * timestep * beta2_t) / (1 - beta2_t)
+
+    lr = neuron.learning_rates[weight_id]
+
+    if rho_t > 4:
+        v_hat = v / (1 - beta2 ** timestep)
+        r_t = math.sqrt(
+            ((rho_t - 4) * (rho_t - 2) * rho_inf)
+            / ((rho_inf - 4) * (rho_inf - 2) * rho_t)
+        )
+        adjustment = lr * r_t * m_hat / (math.sqrt(v_hat) + epsilon)
+    else:
+        # Not enough variance information yet -> momentum-style step
+        adjustment = lr * m_hat
+
+    return adjustment
+
+
+Optimizer_RAdam = StrategyOptimizer(
+    name="RAdam",
+    desc="Rectified Adam - Adam with an early-training variance rectification to improve stability.",
+    when_to_use="When Adam is a bit twitchy early or needs warmup; often 'just works' out of the box.",
+    best_for="General purpose deep learning, especially when early-step stability matters.",
+    fn_popup_info=radam_popup_info,
+    fn_adj_calc=radam_calculate_adjustment,
+    state_per_weight=["m", "v"],  # ← RAdam needs momentum and velocity per weight
+)
 

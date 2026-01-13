@@ -7,7 +7,7 @@ class RecordSample:
     sample_id: int
     inputs: str  # Serialized as JSON
     inputs_unscaled: str  # Serialized as JSON
-    is_true: int # from BinaryDecision class
+    is_true: int
     target: float
     target_unscaled: float
     prediction: float  # After threshold(step function) is applied but before unscaling is applied
@@ -18,7 +18,7 @@ class RecordSample:
     loss: float
     loss_gradient: float
     # error: float
-    accuracy_threshold: float
+    #accuracy_threshold: float
 
     @property
     def error(self):

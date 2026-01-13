@@ -1,6 +1,8 @@
 # pylint: disable=no-self-use
 from abc                       import ABC
 from json                      import dumps
+
+from src.NNA.engine.VCR_NNA import VCR_NNA
 from src.NNA.legos.Activation import *
 from src.NNA.engine.RecordSample import RecordSample
 from src.NNA.engine.VCRRecorder import VCR
@@ -41,8 +43,7 @@ class Gladiator(ABC):
         self.config                 = TRI.config
         self.db                     = TRI.db
         self.training_data          = TRI.training_data         # Only needed for sqlMgr ==> self.ramDb = args[3]
-
-        self.VCR                    = VCR(TRI)
+        self.VCR                    =VCR_NNA(TRI)
         self.sample_id              = 0
         self.epoch                  = 0
         self.total_samples          = 1                         # Timestep for optimizers such as adam
@@ -82,7 +83,6 @@ class Gladiator(ABC):
                     activation          = self.config.output_activation  if is_output_layer else self.config.hidden_activation
                 )
 
-
     def train(self, exploratory_epochs = 0):
         """
         Main method invoked from Framework to train model.
@@ -95,7 +95,7 @@ class Gladiator(ABC):
         epochs_to_run = self.TRI.hyper.epochs_to_run if exploratory_epochs == 0 else exploratory_epochs
         #print(f"epoch_to_run{epochs_to_run}")
         for epoch in range(1, epochs_to_run + 1):                       # Loop to run specified # of epochs
-            if should_print_epoch(epoch,exploratory_epochs):            print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            if should_print_epoch(epoch,exploratory_epochs):            print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.last_mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             self.TRI.converge_cond = self.run_an_epoch(epoch)           # Call function to run single epoch
             if self.TRI.converge_cond != "Did Not Converge":   return   # Converged so end early
 
@@ -110,12 +110,9 @@ class Gladiator(ABC):
             convergence_signal (str): If not converged, empty string, otherwise signal that detected convergence
         """
         self.epoch = epoch  # Set so the child model has access
-
         for self.sample_id, (sample, sample_unscaled) in enumerate(zip(self.config.scaler.scaled_samples, self.config.scaler.unscaled_samples), start=1        ):
-            if (self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion" or self.VCR.abs_error_for_epoch > 1e21):
-                self.VCR.finish_epoch(epoch )
-                return "Gradient Explosion"
-        return self.VCR.finish_epoch(epoch)  # Finish epoch and return convergence signal
+            if self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion":  return "Gradient Explosion"
+        return self.TRI.record_epoch(epoch)  # Finish epoch and return convergence signal
 
     def run_a_sample(self, sample, sample_unscaled):
         snapshot_weights                ("", "_before")
@@ -125,8 +122,6 @@ class Gladiator(ABC):
         prediction_unscaled             = self.config.scaler.unscale_target(prediction_raw)
         prediction_thresh, label        = self.TRI.BD.decide(prediction_unscaled)
         is_true                         = self.TRI.BD.is_true(prediction_unscaled, sample_unscaled[-1])
-
-        #print(f"sample unscaled[:-1]{sample_unscaled[:-1]}")
 
         sample_results = RecordSample(
             run_id              = self.TRI.run_id,
@@ -144,22 +139,16 @@ class Gladiator(ABC):
             loss                = loss,
             loss_function       = self.config.loss_function.name,
             loss_gradient       = blame,
-            accuracy_threshold  = 1e-10,
         )
 
         self.config.optimizer.optimize_sample(sample_results,self.TRI)
-
-        self.VCR.record_blame_calculations(self.blame_calculations)
-        #self.VCR.record_weight_updates(self.weight_calculations, "update")
-        self.VCR.record_sample(sample_results, Neuron.layers)
+        return self.TRI.record_sample(sample_results, self.blame_calculations)
 
     def run_passes(self, sample_scaled):
         prediction_raw = self.forward_pass(sample_scaled)
         error_scaled, loss, loss_gradient = self.judge_pass(sample_scaled, prediction_raw)
         self.back_pass(loss_gradient)
-
         if self.has_gradient_explosion():         return "Gradient Explosion", None, None
-
         return error_scaled, loss, loss_gradient
 
     def has_gradient_explosion(self):
@@ -182,7 +171,6 @@ class Gladiator(ABC):
                 neuron.raw_sum = sum(w * x for w, x in zip(neuron.weights, neuron_inputs))
                 neuron.activate()
         return Neuron.output_neuron.activation_value
-
 
     def judge_pass(self, sample, prediction_raw: float):
         """

@@ -17,12 +17,12 @@ class BinaryDecision:
     def decide(self, prediction_unscaled)-> tuple[float, str | None]:
         if not self.is_active:                      return prediction_unscaled, None  # Consistent tuple, label is None for regression
         if prediction_unscaled >= self.threshold:   return self.target_max, self.label_max
-        return self.target_min, self.label_min
+        else:                                       return self.target_min, self.label_min
 
 
     def is_true(self, prediction_unscaled, target_unscaled) -> bool:
         """Single source of truth for correctness check."""
         if not self.is_active:
-            return None  # Or raise - shouldn't be called for regression
+            return False  # Or raise - shouldn't be called for regression
         predicted_class, _ = self.decide(prediction_unscaled)
         return predicted_class == target_unscaled
