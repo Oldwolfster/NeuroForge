@@ -1,28 +1,14 @@
 # pylint: disable=no-self-use
 from abc                       import ABC
 from json                      import dumps
-
 from src.NNA.engine.VCR_NNA import VCR_NNA
-from src.NNA.legos.Activation import *
-from src.NNA.engine.RecordSample import RecordSample
-from src.NNA.engine.VCRRecorder import VCR
 from src.NNA.utils.general_utils import *
 from src.NNA.legos.Optimizer import *
-from src.NNA.engine.BinaryDecision import BinaryDecision
 from src.NNA.engine.Config import Config
 from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
-#from src.NNA.engine.VCRRecorder          import VCR
-#from src.NNA.engine.Config       import Config
 from src.NNA.engine.Neuron       import Neuron
 from datetime                    import datetime
-
 from src.NNA.utils.snapshot_weights import snapshot_weights
-
-
-#from src.NNA.engine.Utils_DataClasses import sample
-#from src.NNA.legos.WeightInitializers import *
-
-
 
 class Gladiator(ABC):
     """
@@ -35,9 +21,7 @@ class Gladiator(ABC):
     1) Initialization - Preps everything for the framework and gladiator
     2) Training Default Methods - (Forward and Backwards Pass) available for free, but overwritable for experimentation.
     3)
-
     """
-
     def __init__(self,  TRI: TrainingRunInfo):
         self.TRI                    = TRI  # TrainingRunInfo
         self.config                 = TRI.config
@@ -92,12 +76,13 @@ class Gladiator(ABC):
         Returns:
             None
         """
-        epochs_to_run = self.TRI.hyper.epochs_to_run if exploratory_epochs == 0 else exploratory_epochs
+        #epochs_to_run = self.TRI.hyper.epochs_to_run if exploratory_epochs == 0 else exploratory_epochs
+        epochs_to_run = self.TRI.get_epochs(exploratory_epochs)
         #print(f"epoch_to_run{epochs_to_run}")
         for epoch in range(1, epochs_to_run + 1):                       # Loop to run specified # of epochs
             if should_print_epoch(epoch,exploratory_epochs):            print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.last_mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             self.TRI.converge_cond = self.run_an_epoch(epoch)           # Call function to run single epoch
-            if self.TRI.converge_cond != "Did Not Converge":   return   # Converged so end early
+            if self.TRI.converge_cond != "No Early Stopping":   return   # Converged so end early
 
 
     def run_an_epoch(self, epoch: int) -> str:

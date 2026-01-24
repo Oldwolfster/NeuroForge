@@ -11,6 +11,7 @@ from src.NNA.utils.pygame import draw_gradient_rect
 from src.NeuroForge import Const
 import json
 
+from src.NeuroForge.DisplayModel__NeuronWeightsGeometry import DisplayModel__NeuronWeightsGeometry
 from src.NeuroForge.EZPrint import EZPrint
 
 
@@ -82,14 +83,14 @@ class DisplayModel__Neuron_Base:
         self.on_screen = True
         # Conditional visualizer
         self.update_neuron()        # must come before selecting visualizer
-        self.neuron_visualizer      = DisplayModel__NeuronWeights(self, self.ez_printer)
+        self.neuron_visualizer      = DisplayModel__NeuronWeights           (self, self.ez_printer)
+        #self.neuron_visualizer      = DisplayModel__NeuronWeightsGeometry   (self, self.ez_printer)
         self.text_version           = text_version
         if self.is_output:
             self.banner_text = "Out"
             if self.text_version == "Verbose":
                 self.banner_text = "Output Neuron"
         else:
-
             self.banner_text = self.label
             if self.text_version == "Verbose":
                 self.banner_text = f"Hidden Neuron {self.label}"
@@ -1082,15 +1083,17 @@ class DisplayModel__Neuron_Base:
     ####################################################################################
     ########################################################################################
 
-    # DisplayModel__Neuron_Base, draw_blame_sources_section
+    # DisplayModel__Neuron_Base, draw_blame_sources_section for HIDDEN
 
     def draw_blame_sources_section(self):
         """Renders blame sources section below main tooltip."""
         if self.is_output:
+            self.draw_blame_sources_section_output()
             return
+
+
         weights, blames = self.get_elements_of_backproped_error()
-        if not weights:
-            return
+        if not weights:            return
 
         x, y = self.calculate_blame_start_position()
         y = self.draw_section_header(x, y)
@@ -1099,6 +1102,58 @@ class DisplayModel__Neuron_Base:
         y = self.draw_blame_summary(x, y, weights, blames)
         self.draw_bridge_text(x, y)  # No return needed, it's the last call
 
+    # DisplayModel__Neuron_Base.py - add this method after draw_blame_sources_section
+
+    def draw_blame_sources_section_output(self):
+        """Renders blame source section for OUTPUT neuron - where blame originates."""
+        x, y = self.calculate_blame_start_position()
+
+        # Header
+        header = self.font_body.render("BLAME SOURCES", True, Const.COLOR_BLACK)
+        self.cached_tooltip.blit(header, (x, y + 5))
+        y += header.get_height() + 15
+
+        # Explanation text
+        lines = [
+            "This is where blame ORIGINATES.",
+            "No chain rule needed - blame flows",
+            "directly from the prediction error.",
+            ""
+        ]
+        for line in lines:
+            text = self.font_body.render(line, True, Const.COLOR_BLACK)
+            self.cached_tooltip.blit(text, (x, y))
+            y += text.get_height() + 2
+
+        y += 10
+
+        # The calculation with contextual hints
+        accepted_blame = self.loss_gradient * self.activation_gradient
+        calc_lines = [
+            ("Loss Gradient:", self.loss_gradient, "(NOT to be confused with loss value which BP ignores.)"),
+            ("× Act Gradient:", self.activation_gradient, "(from 'Forward Prop' look up and left)"),
+            ("= Accepted Blame:", accepted_blame, "")
+        ]
+
+        label_x = x + 20
+        value_x = x + 150
+        hint_x = x + 220
+
+        for label_text, value, hint in calc_lines:
+            label = self.font_body.render(label_text, True, Const.COLOR_BLACK)
+            val = self.font_body.render(self.smart_format_for_popup(value), True, Const.COLOR_BLACK)
+            self.cached_tooltip.blit(label, (label_x, y))
+            self.cached_tooltip.blit(val, (value_x, y))
+            if hint:
+                hint_surf = self.font_body.render(hint, True, Const.COLOR_GRAY_DARK)
+                self.cached_tooltip.blit(hint_surf, (hint_x, y))
+            y += Const.TOOLTIP_ROW_HEIGHT
+
+        y += 15
+
+        # Bridge text
+        bridge = self.font_section.render("ACCEPTED BLAME IS COLUMN 2 ABOVE", True, Const.COLOR_BLACK)
+        self.cached_tooltip.blit(bridge, (x, y))
     def calculate_blame_start_position(self):
         x = Const.TOOLTIP_PADDING + sum(self.column_widths[:6]) +10
         leaky_row_index = len(self.weights_before) + 1  # +1 for "Raw Sum" row

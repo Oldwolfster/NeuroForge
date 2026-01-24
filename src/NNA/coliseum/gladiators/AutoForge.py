@@ -3,7 +3,7 @@ from typing import Tuple
 
 from src.NNA.legos.Activation import *
 from src.NNA.engine.BaseGladiator import Gladiator
-from src.NNA.legos.Initializer import *
+from src.NNA.legos.Weight_initializer import *
 from src.NNA.legos.Loss import *
 from src.NNA.legos.Scaler import *
 from src.NNA.legos.Optimizer import *
@@ -22,16 +22,16 @@ class AutoForge_TEMPLATE(Gladiator):
         """ 👉  Anything prior to initializing neurons goes here
             💪  For example setting config options.        """
 
-        config.architecture            = [10,5,1]
-        config.optimizer                = Optimizer_Adam_NoHat
-        #config.learning_rate           = 0.01
-        config.weight_initializer      = Initializer_He
-        #config.hidden_activation       = Activation_Tanh
-        #config.output_activation       = Activation_NoDamnFunction
-        config.loss_function           = Loss_LogCosh
-        config.batch_size              = 7
+        #config.architecture            = [2,4,1]
+        #config.optimizer                = Optimizer_Adam_NoHat
+        config.learning_rate           = 0.5
+        #config.weight_initializer      = Initializer_Xavier
+        config.hidden_activation       = Activation_Tanh
+        #config.output_activation       = Activation_Sigmoid
+        #config.loss_function           = Loss_BCE
+        config.batch_size              = 4
         #config.roi_mode                = ROI_Mode.MOST_ACCURATE    #SWEET_SPOT(Default), ECONOMIC or MOST_ACCURATE
-        #config.input_scalers           = Scaler_NONE                                 # All inputs same scaler
+        config.input_scalers           = Scaler_ZScore                                 # All inputs same scaler
         #config.input_scalers           = [Scaler_MinMax, Scaler_MinMax, Scaler_MinMax, Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax, Scaler_Robust]
         #config.target_scaler           = Scaler_NONE #Scaler_NONE # Scaler_MinMax
         """config.input_scalers = [

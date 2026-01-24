@@ -33,6 +33,7 @@ class ArchitecturePopup(Popup_Base):
         def get_labels():
             label_rows = [
                 ("Model Definition",     ""),  # spacer
+                ("",                     "Seed"),
                 ("",                     "Neuron Layout"),
                 ("",                     "Initializer"),
                 ("",                     "Hidden Activation"),
@@ -86,6 +87,7 @@ class ArchitecturePopup(Popup_Base):
             cfg = TRI.config
             describe_rows = [
                 self.get_model_name(TRI),
+                TRI.seed,
                 architecture(cfg.architecture),
                 cfg.weight_initializer.name,
                 hidden_activation(cfg.architecture, cfg.hidden_activation.name),

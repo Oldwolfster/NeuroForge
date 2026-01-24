@@ -1,60 +1,79 @@
 from pathlib import Path
 
+from src.NNA.legos._LegoManager import LegoManager
+
+
 class BatchRunner:
-    def __init__(self, batch_id: int, db_dsk):
-        print("BR Constructor")
-        self.batch_id = batch_id
-        self.conn = db_dsk.conn
-        self.pending_runs = []
-        self.current_index = -1
-        self.current_run_id = None
-        self.load_pending_runs()
-
-
-    def load_pending_runs(self):
-        """Load all pending runs for this batch, ordered by run_id"""
-
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT run_id, seed, gladiator, arena, architecture,
-                   loss, optimizer, hidden_activation, output_activation,
-                   initializer, learning_rate, lr_specified
-            FROM training_runs 
-            WHERE batch_id = ? AND status = 'pending'
-            ORDER BY run_id
-        ''', (self.batch_id,))
-
-        self.pending_runs = cursor.fetchall()
-        print(f"🔍 BatchRunner: Found {len(self.pending_runs)} pending runs for batch_id={self.batch_id}")
 
     def __iter__(self):
         """Make BatchRunner iterable"""
         return self
 
+    def __init__(self, batch_id: int, hyper):
+        #print("BR Constructor")
+        self.lego_mgr = LegoManager()
+        self.batch_id = batch_id
+        self.conn = hyper.db_dsk.conn
+        self.current_index = -1
+        self.current_run_id = None
+        if hyper.neuro_FORGE[0] == 0:   self.load_pending_run_ids()
+        else:                           self.pending_run_ids = hyper.neuro_FORGE
+
+    def load_pending_run_ids(self):
+        """Load only the run_ids, not the full configs"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT run_id 
+            FROM batch_history
+            WHERE batch_id = ? AND status = 'pending'
+            ORDER BY run_id
+        ''', (self.batch_id,))
+
+        self.pending_run_ids = [row[0] for row in cursor.fetchall()]
+        print(f"🔍 BatchRunner: Found {len(self.pending_run_ids)} pending runs for batch_id={self.batch_id}")
+
     def __next__(self):
-        """Return next setup dict, or raise StopIteration"""
+        """Fetch next run on-demand and return (run_id, setup)"""
         self.current_index += 1
 
-        if self.current_index >= len(self.pending_runs):
+        if self.current_index >= len(self.pending_run_ids):
             raise StopIteration
 
-        row = self.pending_runs[self.current_index]
-        self.current_run_id = row[0]  # run_id is first column
+        self.current_run_id = self.pending_run_ids[self.current_index]
+        print(f"self.current_run_id={self.current_run_id}")
+        # Fetch config for this run_id only
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT key, value
+            FROM batch_details
+            WHERE run_id = ?
+        ''', (self.current_run_id,))
 
-        # Build setup dict from DB row (strings for now, we'll deserialize next chunk)
-        setup = {
-            'seed': row[1],
-            'gladiator': row[2],
-            'arena': row[3],
-            'architecture': eval(row[4]),  # "[4,4,1]" -> [4,4,1]
-            'loss': row[5],  # Still string var_name
-            'optimizer': row[6],
-            'hidden_activation': row[7],
-            'output_activation': row[8],
-            'initializer': row[9],
-            'learning_rate': row[10],
-            'lr_specified': bool(row[11]),
-        }
+
+        run_config = dict(cursor.fetchall())
+        setup = self.deserialize_run_config(run_config)
+
+        return (self.current_run_id, setup)
+
+    def deserialize_run_config(self, run_config: dict) -> dict:
+        """Convert string values back to proper types"""
+        setup = {}
+
+        for key, value in run_config.items():
+            if key == 'architecture':
+                setup[key] = eval(value)  # "[4,4,1]" -> [4,4,1]
+            elif key in ['seed', 'batch_size']:
+                setup[key] = int(value)
+            elif key == 'learning_rate':
+                setup[key] = float(value) if value != 'None' else None
+            elif key == 'lr_specified':
+                setup[key] = value == 'True'
+            elif key in ['gladiator', 'arena']:
+                setup[key] = value
+            elif self.lego_mgr.is_lego_dimension(key) and value and value != 'None':
+                setup[key] = self.lego_mgr.string_to_lego(value)
+            else:
+                setup[key] = None
 
         return setup
 
@@ -66,4 +85,4 @@ class BatchRunner:
     @property
     def total_runs(self):
         """Total number of runs in this batch"""
-        return len(self.pending_runs)
+        return len(self.pending_run_ids)

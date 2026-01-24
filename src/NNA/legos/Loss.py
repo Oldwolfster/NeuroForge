@@ -1,6 +1,7 @@
 #from src.NNA.engine.Neuron   import Neuron
 import math
 
+from src.NNA.legos._LegoBase import LegoBase
 from src.NNA.legos.Activation import *
 
 
@@ -14,7 +15,8 @@ def _get_n(y_true):
     except TypeError:
         return 1
 
-class StrategyLossFunction:
+# Loss.py - line 17, add inheritance
+class StrategyLossFunction(LegoBase):
     """
     🚀 Encapsulates loss function strategies with optional gradient computation.
 
@@ -54,6 +56,8 @@ class StrategyLossFunction:
         derivative_formula="",
         allowed_activations=None,   # 🚀 New: List of valid activation functions
     ):
+
+        super().__init__                    ( name, ["loss_function"])
         self.loss                           = loss
         self.derivative                     = derivative
         self.name                           = name

@@ -4,6 +4,7 @@ from src.ArenaSettings import HyperParameters
 from src.NNA.engine.RecordEpoch import RecordEpoch
 from src.NNA.engine.RecordSample import RecordSample
 from src.NNA.engine.VCR_NNA import VCR_NNA
+from src.NNA.engine.early_stopping.EarlyStopper import EarlyStopper
 from src.NNA.utils import RamDB
 from datetime import datetime
 
@@ -25,12 +26,15 @@ class TrainingRunInfo:
         self.vcr_nna:           VCR_NNA             = VCR_NNA(self)  #reference set in base gladiator.
         self.backprop_headers:  list                = None
         self.setup:             dict                = setup                 #the string written to db with purpose of rerunning exactly at a later date
+        self.early_stopper:     EarlyStopper        = EarlyStopper(self)
 
         #Non- Training info
         self.gladiator:         str                 = setup["gladiator"]
         self.run_id:            int                 = run_id
+        self.seed:              int                 = setup.get("seed")
         self.time_start:        datetime            = datetime.now()
         self.time_end:          datetime            = None
+        self.explore_epochs:    int                 = -1
 
         # Training Metrics
         self.abs_err_for_epoch: float               = 0
@@ -38,10 +42,7 @@ class TrainingRunInfo:
 
         #Summary Metrics
         self.last_epoch:        int                 = 0
-
-        # Unconfirmed needed metrics
         self.converge_cond:     str                 = None
-
         self.last_mae:          float               = 0
         self.lowest_mae:        float               = 6.9e69
         self.lowest_mae_epoch:  int                 = 0
@@ -54,6 +55,12 @@ class TrainingRunInfo:
     def should_record(self, minimum_level: RecordLevel) -> bool:
         #return True
         return self.record_level.value >= minimum_level.value
+
+    def get_epochs(self,exploratory_epochs: int) -> int:
+        self.explore_epochs = exploratory_epochs=exploratory_epochs
+        if exploratory_epochs == 0: return self.hyper.epochs_to_run
+        return exploratory_epochs
+
 
     @property
     def time_seconds(self) -> float:
@@ -102,8 +109,6 @@ class TrainingRunInfo:
             self.best_accuracy_epoch = epoch
             self.best_accuracy       = self.accuracy
 
-
-
         epoch_record = RecordEpoch(
             run_id=self.run_id,
             epoch=epoch,
@@ -113,7 +118,8 @@ class TrainingRunInfo:
             mae=self.last_mae,
         )
         self.vcr_nna.write_epoch(epoch_record)
+        self.converge_cond = "No Early Stopping"
+        if self.explore_epochs == 0:  self.converge_cond      = self.early_stopper.check_if_converged(epoch_record.epoch,epoch_record.mae) # "Did Not Converge" # TODO: convergence detector
         self.abs_err_for_epoch  = 0
         self.bd_correct         = 0
-        self.converge_cond      = "Did Not Converge" # TODO: convergence detector
         return   self.converge_cond

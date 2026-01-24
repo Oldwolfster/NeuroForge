@@ -15,26 +15,38 @@ class LegoLoader:
             "input_scalers": "Scaler",
         }
 
-
-
     def get_all_legos(self, dimension_key: str) -> list:
         """Wildcard expansion: 'initializer' -> [Initializer_Xavier, Initializer_He, ...]"""
         prefix = self.dimension_aliases.get(dimension_key, dimension_key.capitalize())
-        lego_file = self.legos_dir / f"{prefix}.py"
-        print("get all legos")
-        if not lego_file.exists():          raise ValueError(f"No lego file: {lego_file}")
-
-        instance_names = self.scan_for_instances(lego_file, prefix)
-        module = importlib.import_module(f".{prefix}", package="src.NNA.legos")
 
         instances = []
-        for name in instance_names:
-            instance = getattr(module, name)
-            instance.var_name = name  # Stamp it
-            instances.append(instance)
+        seen_names = set()
+
+        for lego_file in sorted(self.legos_dir.glob("*.py")):
+            if lego_file.name.startswith("_"):
+                continue
+            if lego_file.name == "__init__.py":
+                continue
+
+            instance_names = self.scan_for_instances(lego_file, prefix)
+            if not instance_names:
+                continue
+
+            module = importlib.import_module(f".{lego_file.stem}", package="src.NNA.legos")
+
+            for name in instance_names:
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+
+                instance = getattr(module, name)
+                instance.var_name = name  # Stamp it
+                instances.append(instance)
+
+        if not instances:
+            raise ValueError(f"No legos found for prefix '{prefix}_' in {self.legos_dir}")
 
         return instances
-
 
     def scan_for_instances(self, lego_file: Path, prefix: str) -> list:
         """Find all 'Prefix_Something = ' declarations in file"""

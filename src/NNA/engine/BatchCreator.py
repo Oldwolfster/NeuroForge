@@ -1,39 +1,101 @@
+
 from src.ArenaSettings import HyperParameters
 import random
-from src.NNA.legos._LegoWildCard import LegoLoader
+from src.NNA.legos._LegoManager import LegoManager
+from src.NNA.utils.db_prep_disk import check_batch_schema
 from pathlib import Path
 from itertools import product
 
 class BatchCreator:
     def __init__(self, hyper: HyperParameters):
-        self.hyper = hyper
-        self.conn = hyper.db_dsk.conn
-        self.check_schema()
+        self.hyper          = hyper
+        self.conn           = hyper.db_dsk.conn
+        check_batch_schema  ( hyper.db_dsk.conn)
+        self.lego_mgr       = LegoManager()
 
-    def create_a_batch(self):
-        dimensions  = self.prep_dimensions()
-        dimensions  = self.expand_wildcards(dimensions)
-        dim_keys    = list(dimensions.keys())
-        dim_values  = [dimensions[k] for k in dim_keys]
-        batch_id    = self.save_batch()
-        print(f"Creating batch #{batch_id}")
-        run_number  = 0
+    def create_new_batch(self):
+        """Create a brand new batch - will fail if run_ids collide."""
+        dimensions = self.prep_dimensions()
+        dimensions = self.expand_wildcards(dimensions)
+        dim_keys = list(dimensions.keys())
+        dim_values = [dimensions[k] for k in dim_keys]
+        batch_id = self.save_batch()
+        print(f"Creating NEW batch #{batch_id}")
+        run_number = 0
 
         for gladiator in self.hyper.gladiators:
             lr_flag = self.is_lr_overriding_sweep(gladiator, dim_keys)
             for arena in self.hyper.arenas:
                 for combo in product(*dim_values):
                     run_number += 1
-                    config = dict(zip(dim_keys, combo))
-                    config['gladiator'] = gladiator
-                    config['arena'] = arena
-                    config['lr_specified'] = lr_flag
-                    #print(config)
-                    #print(f"{run_number}: {gladiator} | {arena} | {config.get('initializer', '-')}")
-                    self.save_training_run(config, batch_id)
+                    run_config = dict(zip(dim_keys, combo))
+                    run_config['gladiator'] = gladiator
+                    run_config['arena'] = arena
+                    run_config['lr_specified'] = lr_flag
+                    self.save_training_run(run_config, batch_id)
         return batch_id
 
-    def prep_dimensions(self):
+    def resume_existing_batch(self, batch_id: int):
+        """Resume an existing batch - only adds runs that don't exist yet."""
+        print(f"Resuming batch #{batch_id}")
+        cursor = self.conn.cursor()
+
+        # Get highest run_id so far
+        cursor.execute('SELECT COALESCE(MAX(run_id), 0) FROM batch_details WHERE batch_id = ?', (batch_id,))
+        next_run_id = cursor.fetchone()[0] + 1
+
+        dimensions = self.prep_dimensions()
+        dimensions = self.expand_wildcards(dimensions)
+        dim_keys = list(dimensions.keys())
+        dim_values = [dimensions[k] for k in dim_keys]
+
+        for gladiator in self.hyper.gladiators:
+            lr_flag = self.is_lr_overriding_sweep(gladiator, dim_keys)
+            for arena in self.hyper.arenas:
+                for combo in product(*dim_values):
+                    run_config = dict(zip(dim_keys, combo))
+                    run_config['gladiator'] = gladiator
+                    run_config['arena'] = arena
+                    run_config['lr_specified'] = lr_flag
+
+                    # Check if this config already exists
+                    if not self.run_exists(batch_id, run_config):
+                        self.save_training_run(run_config, batch_id, next_run_id)
+                        next_run_id += 1
+
+        return batch_id
+
+    def run_exists(self, batch_id: int, run_config: dict) -> bool:
+        """Check if a run with this exact config already exists."""
+        cursor = self.conn.cursor()
+
+        # Build WHERE clause for all config keys
+        conditions = []
+        params = [batch_id]
+
+        for key, value in run_config.items():
+            serialized = self.serialize_value(key, value)
+            conditions.append(f"(key = ? AND value = ?)")
+            params.extend([key, serialized])
+
+        query = f'''
+            SELECT run_id, COUNT(*) as match_count
+            FROM batch_details
+            WHERE batch_id = ? AND ({' OR '.join(conditions)})
+            GROUP BY run_id
+            HAVING match_count = ?
+        '''
+        params.append(len(run_config))
+        cursor.execute(query, params)
+        return cursor.fetchone() is not None
+
+    def serialize_value(self, key, value):
+        """Serialize a value for storage."""
+        if key in ['gladiator', 'arena', 'lr_specified']:   return str(value)
+        elif self.lego_mgr.is_lego_dimension(key):          return self.lego_mgr.lego_to_string(value)
+        else:                                               return str(value)
+
+    def prep_dimensions_orig(self):
         dimensions = self.validate_dimensions(self.hyper.dimensions)
         self.ensure_output_neuron(dimensions)
         if "seed" not in dimensions:
@@ -41,24 +103,33 @@ class BatchCreator:
             else:                           dimensions["seed"] = [random.randint(1, 999999) for _ in range(self.hyper.seed_replicates)]                 # User wants randomness (random_seed=0) - honor seed_replicates
         return dimensions
 
+    def prep_dimensions(self):
+        dimensions = self.validate_dimensions(self.hyper.dimensions)
+        self.ensure_output_neuron(dimensions)
+
+        if "seed" not in dimensions:
+            seeds = []
+            if self.hyper.random_seed != 0:
+                seeds.append(self.hyper.random_seed)
+            remaining = self.hyper.seed_replicates - len(seeds)
+            seeds.extend([random.randint(1, 999999) for _ in range(remaining)])
+            dimensions["seed"] = seeds if seeds else [random.randint(1, 999999)]
+            return dimensions
+
     def ensure_output_neuron(self, dimensions: dict) -> None:
         if "architecture" not in dimensions: return
         for arch in dimensions["architecture"]:
             if arch[-1] != 1: arch.append(1)
 
-    # BatchCreator.py
-
     def expand_wildcards(self, dimensions: dict[str, list]) -> dict[str, list]:
         """Expand '*' wildcards to all available legos"""
-        loader = LegoLoader()
         expanded = {}
         for key, values in dimensions.items():
             if values == "*":
-                expanded[key] = loader.get_all_legos(key)
-            elif isinstance(values, list):
-                expanded[key] = values
-            else:
-                expanded[key] = [values]
+                # Wildcard - get all legos for this dimension from registry
+                if key not in self.lego_mgr.registry: raise ValueError(f"Unknown dimension: {key}")
+                expanded[key] = self.lego_mgr.registry[key]["legos"]
+            else: expanded[key] = values if isinstance(values, list) else [values] # Pass through as-is (primitives or lego instances)
         return expanded
 
     def is_lr_overriding_sweep(self,gladiator_name: str, dimension_keys: list) -> bool:
@@ -89,166 +160,73 @@ class BatchCreator:
                     return True
         return False
 
-    def check_schema(self):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS batches (
-                batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                batch_name TEXT,
-                batch_notes TEXT,
-                dimensions TEXT,
-                full_record_count INTEGER DEFAULT 2,
-                parent_batch_id INTEGER,
-                gladiator TEXT,
-                arena TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                completed_at DATETIME
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS training_runs (
-                run_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                batch_id INTEGER,
-                status TEXT DEFAULT 'pending',
-                record_level TEXT,
-                seed INTEGER,
-                gladiator TEXT,
-                arena TEXT,
-                architecture TEXT,
-                loss TEXT,
-                optimizer TEXT,
-                hidden_activation TEXT,
-                output_activation TEXT,
-                initializer TEXT,
-                input_scalers TEXT,
-                output_scaler TEXT,
-                learning_rate REAL,
-                lr_specified INTEGER,
-                batch_size INTEGER,
-                roi_mode TEXT,
-                epoch_count INTEGER,
-                regularization TEXT,
-                dropout REAL,
-                momentum REAL,
-                accuracy REAL,
-                final_mae REAL,
-                best_mae REAL,
-                convergence_condition TEXT,
-                problem_type TEXT,
-                sample_count INTEGER,
-                target_min REAL,
-                target_max REAL,
-                target_min_label TEXT,
-                target_max_label TEXT,
-                target_mean REAL,
-                target_stdev REAL,
-                runtime_seconds REAL,
-                timestamp DATETIME,
-                notes TEXT
-            )
-        ''')
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_batch_status_run
-            ON training_runs(batch_id, status)
-        ''')
-        self.conn.commit()
-
     def save_batch(self) -> int:
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO batches (
-                batch_name, batch_notes, dimensions, full_record_count, gladiator, arena
-            ) VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO batch_specs (
+                batch_name, batch_notes, dimensions, gladiators, arenas
+            ) VALUES (?, ?, ?, ?, ?)
         ''', (
             self.hyper.batch_name,
             self.hyper.batch_notes,
             str(self.hyper.dimensions),
-            0, #we don't know this at time of generating it.
             str(self.hyper.gladiators),
             str(self.hyper.arenas),
         ))
         self.conn.commit()
+        print("Saved batch")
         return cursor.lastrowid
 
-    def save_training_run(self, config: dict, batch_id: int):
+    def save_training_run(self, run_config: dict, batch_id: int):
+        """Save run as key-value pairs in batch_details table."""
         cursor = self.conn.cursor()
+
+        # Create history record FIRST - this generates the run_id (PK)
         cursor.execute('''
-            INSERT INTO training_runs (
-                batch_id, status, seed,
-                gladiator, arena, architecture,
-                loss, optimizer, hidden_activation, output_activation,
-                initializer, learning_rate, lr_specified
-            ) VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            batch_id,
-            config.get('seed'),
-            config.get('gladiator'),
-            config.get('arena'),
-            str(config.get('architecture')),
-            getattr(config.get('loss'), 'var_name', None),
-            getattr(config.get('optimizer'), 'var_name', None),
-            getattr(config.get('hidden_activation'), 'var_name', None),
-            getattr(config.get('output_activation'), 'var_name', None),
-            getattr(config.get('initializer'), 'var_name', None),
-            config.get('learning_rate'),
-            config.get('lr_specified'),
-        ))
+            INSERT INTO batch_history (batch_id, status, gladiator, arena)
+            VALUES (?, 'pending', ?, ?)
+        ''', (batch_id, run_config['gladiator'], run_config['arena']))
+
+        run_id = cursor.lastrowid  # Get the auto-generated run_id
+
+        # Now insert config key-value pairs using that run_id
+        for key, value in run_config.items():
+            serialized = self.serialize_value(key, value)
+            cursor.execute('''
+                INSERT INTO batch_details (batch_id, run_id, key, value)
+                VALUES (?, ?, ?, ?)
+            ''', (batch_id, run_id, key, serialized))
+
         self.conn.commit()
-        return cursor.lastrowid
 
+    def get_valid_config_keys(self) -> set:
+        """Get valid dimension keys from Config class attributes."""
+        from src.NNA.engine.Config import Config
+        excluded = {'TRI', 'scaler'}
+        return {attr for attr in dir(Config) if not attr.startswith('_') and attr not in excluded}
 
-    VALID_DIMENSION_KEYS = {
-        # Lego types
-        "loss", "optimizer", "initializer",
-        "hidden_activation", "output_activation",
-        "input_scalers", "output_scaler",
-        # Non-lego dimensions
-        "seed", "architecture", "batch_size", "learning_rate",
-    }
 
     def validate_dimensions(self, dimensions: dict) -> dict:
-        """Validate keys, normalize single values to lists, check lego types"""
-        loader = LegoLoader()
+        """Validate keys and normalize single values to lists"""
         validated = {}
 
-        lego_keys = {"loss", "optimizer", "initializer",
-                     "hidden_activation", "output_activation",
-                     "input_scalers", "output_scaler"}
-
         for key, values in dimensions.items():
-            if key not in self.VALID_DIMENSION_KEYS:
-                raise ValueError(f"Invalid dimension key: '{key}'. Valid keys: {sorted(self.VALID_DIMENSION_KEYS)}")
+            if not self.lego_mgr.is_valid_dimension(key):   raise ValueError(f"Unknown dimension: '{key}'. Valid dimensions: {self.lego_mgr.get_valid_dimensions()}")
 
             if values == "*":
+                if not self.lego_mgr.is_lego_dimension(key):   raise ValueError(f"Cannot use wildcard on primitive dimension '{key}'")
                 validated[key] = values
                 continue
 
-            if not isinstance(values, list):
-                values = [values]
+            # Normalize to list
+            values = values if isinstance(values, list) else [values]
 
-            if key in lego_keys:
-                expected_prefix = self.get_expected_prefix(key)
-                stamped = []
+            # Validate lego types i.e. not putting a loss function in a weight initializer
+            if self.lego_mgr.is_lego_dimension(key):
+                expected_kind = self.lego_mgr.registry[key]["kind"]
                 for v in values:
-                    loader.stamp_var_name(key, v)
-                    if not getattr(v, 'var_name', '').startswith(expected_prefix):
-                        raise ValueError(f"Dimension '{key}' expects {expected_prefix}* legos, got: {v.var_name}")
-                    stamped.append(v)
-                values = stamped
-
+                    if not isinstance(v, expected_kind):    raise ValueError(f"Dimension '{key}' expects {expected_kind.__name__}, got {type(v).__name__}")
             validated[key] = values
-
         return validated
-    def get_expected_prefix(self, dimension_key: str) -> str:
-        """Return expected instance prefix for lego dimensions, None for non-lego"""
-        aliases = {
-            "hidden_activation": "Activation_",
-            "output_activation": "Activation_",
-            "input_scalers": "Scaler_",
-            "output_scaler": "Scaler_",
-        }
-        if dimension_key in aliases:
-            return aliases[dimension_key]
-        if dimension_key in {"loss", "optimizer", "initializer"}:
-            return dimension_key.capitalize() + "_"
-        return None  # Non-lego dimension
+
+

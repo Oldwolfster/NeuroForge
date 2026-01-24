@@ -33,15 +33,15 @@ class RamDB:
         #self.cursor.execute("PRAGMA locking_mode = EXCLUSIVE")
         self.cursor.execute("PRAGMA count_changes = OFF")
 
-        if self.is_memory:
-            # Aggressive settings - fine for RAM (no crash risk)
-            self.cursor.execute("PRAGMA synchronous = OFF")
-            self.cursor.execute("PRAGMA journal_mode = OFF")
-            self.cursor.execute("PRAGMA cache_spill = OFF")
-        else:
-            # Safer for disk - won't corrupt on crash
-            self.cursor.execute("PRAGMA synchronous = NORMAL")
-            self.cursor.execute("PRAGMA journal_mode = WAL")
+        #if self.is_memory:
+        # Aggressive settings - fine for RAM (no crash risk)
+        self.cursor.execute("PRAGMA synchronous = OFF")
+        self.cursor.execute("PRAGMA journal_mode = OFF")
+        self.cursor.execute("PRAGMA cache_spill = OFF")
+        #else:
+        #    # Safer for disk - won't corrupt on crash
+        #    self.cursor.execute("PRAGMA synchronous = NORMAL")
+        #    self.cursor.execute("PRAGMA journal_mode = WAL")
 
 
     def _infer_schema(self, obj, exclude_keys=None):
@@ -373,7 +373,8 @@ class RamDB:
 
 
 
-    def copy_tables_to_permanent(self, db_name='arena_history.db', subfolder='history'):
+    #def copy_tables_to_permanent(self, db_name='arena_history.db', subfolder='history'):
+    def copy_tables_to_permanent(self,db_connection):
         """
         Copy all tables from the in-memory SQLite database (self.conn) into the
         permanent SQLite database on disk (overwriting any existing tables with the same name).
@@ -385,7 +386,8 @@ class RamDB:
         - subfolder (str): name of the folder under the grandparent directory where the permanent DB lives.
         """
         # 1. Open (or create) the permanent database file.
-        perm_conn = self.get_perm_db_connection(db_name=db_name, subfolder=subfolder)
+        #perm_conn = self.get_perm_db_connection(db_name=db_name, subfolder=subfolder)
+        perm_conn = db_connection
         perm_cursor = perm_conn.cursor()
 
         # 2. Get a cursor on the in-memory DB.
@@ -452,7 +454,7 @@ class RamDB:
             """
         # 5. Commit & close the permanent connection
         perm_conn.commit()
-        perm_conn.close()
+        #perm_conn.close()
 
     def get_perm_db_connection(self, db_name, subfolder='history'):
         """

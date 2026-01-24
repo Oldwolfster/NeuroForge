@@ -26,7 +26,7 @@ class GeneratorNeuron:
         available_height = GeneratorNeuron.model.height
         available_width = GeneratorNeuron.model.width
         full_architecture = GeneratorNeuron.get_full_architecture()
-        print(f"the model= {the_model.TRI.gladiator} config architecture ={the_model.TRI.config.architecture} - full architecture: ", full_architecture)
+        #print(f"the model= {the_model.TRI.gladiator} config architecture ={the_model.TRI.config.architecture} - full architecture: ", full_architecture)
         layer_count = len(full_architecture)
         layer_width, gap_width = GeneratorNeuron.calculate_column_width(
             layer_count, max_neuron_size, min_gap, available_width

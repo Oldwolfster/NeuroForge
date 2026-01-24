@@ -3,7 +3,7 @@ from typing import Tuple
 
 from src.NNA.legos.Activation import *
 from src.NNA.engine.BaseGladiator import Gladiator
-from src.NNA.legos.Initializer import *
+from src.NNA.legos.Weight_initializer import *
 from src.NNA.legos.Loss import *
 from src.NNA.legos.Scaler import *
 from src.NNA.legos.Optimizer import *

@@ -1,11 +1,11 @@
 from src.NNA.legos.Activation import Activation_NoDamnFunction
-from src.NNA.legos.Initializer import Initializer_Tiny
+from src.NNA.legos.Weight_initializer import Initializer_Tiny
 from src.NNA.engine.Neuron import Neuron
 from src.NNA.utils.RamDB import RamDB
 from src.NNA.engine.RecordSample import RecordSample
 
 
-def create_weight_adjustments_table11(db: RamDB, run_id: int, update_or_finalize: str, arg_count=12):
+def create_weight_adjustments_table(db: RamDB, run_id: int, update_or_finalize: str, arg_count=12):
     """
     Creates a dedicated WeightAdjustments_<run_id> table with arg_1..arg_N fields.
     """
@@ -103,6 +103,7 @@ def prep_RamDB():
 
 
 def create_weight_tables(db, run_id):
+    #pass
     create_weight_adjustments_table(db, run_id, "update")
     create_weight_adjustments_table(db, run_id, "finalize")
     delete_records(db, run_id)  # in case it had been run by LR sweep

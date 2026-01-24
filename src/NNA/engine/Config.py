@@ -1,10 +1,9 @@
-from src.NNA.legos.Activation import *
-from src.NNA.legos.Initializer import *
+from src.NNA.legos.Weight_initializer import *
 from src.NNA.legos.Loss import *
 from src.NNA.legos.Optimizer import *
 from src.NNA.legos.Scaler import *
-from src.NNA.legos._LegoAutoML import LegoAutoML
-
+from src.NNA.engine._LegoAutoML import LegoAutoML
+from src.NNA.legos.Activation import *
 
 
 class Config:
@@ -40,6 +39,36 @@ class Config:
         ok_to_print =  self.TRI.record_level != RecordLevel.NONE
         LegoAutoML(ok_to_print).apply(self, self.get_rules())
         self.finish_setup()
+
+    def get_serialized_config(self) -> dict:
+        """Return all config attributes as serializable dict."""
+        excluded = {'TRI', 'scaler'}
+        all_attrs = [attr for attr in dir(self) if not attr.startswith('_')]
+        print(f"All Config attributes: {all_attrs}")
+        print(f"print  self.loss_function ->{ self.loss_function}")
+        config_dict = {}
+        for attr in dir(self):
+            if attr.startswith('_') or attr in excluded:
+                continue
+
+            value = getattr(self, attr, None)
+
+            # Skip methods, but NOT strategy legos (which have .name or .var_name)
+            if callable(value) and not (hasattr(value, 'name') or hasattr(value, 'var_name')):
+                continue
+
+            # Serialize lego instances
+            if hasattr(value, 'var_name'):
+                config_dict[attr] = value.var_name
+            elif hasattr(value, 'name'):  # Strategy pattern legos
+                config_dict[attr] = value.name
+            elif isinstance(value, list):
+                config_dict[attr] = str(value)
+            else:
+                config_dict[attr] = value  # Include None values too
+
+        return config_dict
+
 
     def update_from_batch_sweep(self, setup):
         for key, value in setup.items():    # Loop through dimensions dictionary.
@@ -90,11 +119,12 @@ class Config:
             (1, 502, {"target_scaler"       : Scaler_MinMax_Neg1to1}        , "loss_function.name == 'Hinge Loss'"),
             (0, 600, {"weight_initializer"  : Initializer_He}               , "hidden_activation.name == 'LeakyReLU'"),
             (0, 601, {"weight_initializer"  : Initializer_He}               , "hidden_activation.name == 'ReLU'"),
+            (0, 602, {"input_scalers"       : Scaler_ZScore}                , "hidden_activation.name == 'Tanh'"),
 
             #Below are default settings if an above rule has not set an option
             (0, 6691, {"optimizer"          : Optimizer_SGD}                , "1 == 1"),
             (0, 6693, {"batch_size"         : 1}                            , "1 == 1"),
-            (0, 6694, {"architecture"       : [2, 1]}                       , "1 == 1"),
+            (0, 6694, {"architecture"       : [8, 4, 1]}                    , "1 == 1"),
             (0, 6695, {"loss_function"      : Loss_MAE}                     , "1 == 1"),
             (0, 6696, {"hidden_activation"  : Activation_LeakyReLU}         , "1 == 1"),
             (0, 6697, {"weight_initializer" : Initializer_Xavier}           , "1 == 1"),

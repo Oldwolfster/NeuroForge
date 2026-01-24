@@ -1,13 +1,13 @@
 import math
-
 from src.NNA.engine.Neuron import Neuron
 from src.NNA.engine.RecordSample import RecordSample
 from typing import TYPE_CHECKING
+from src.NNA.legos._LegoBase import LegoBase
 if TYPE_CHECKING:     from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
-from src.NNA.utils.enums import RecordLevel
 
 
-class StrategyOptimizer:
+
+class StrategyOptimizer(LegoBase):
     """
     Represents an optimization algorithm.
     """
@@ -18,17 +18,26 @@ class StrategyOptimizer:
         best_for                : str,
         fn_popup_info,
         fn_adj_calc,
+        fn_brain                = None,
         state_per_weight        = None,
-        popup_formula           : str = None
+        popup_formula: str      = None,
+
+
         ):
+        super().__init__        (name, ["optimizer"])
+
         self.name               = name
         self.desc               = desc
         self.when               = when_to_use
         self.best               = best_for
         self.fn_popup_info      = fn_popup_info
         self.fn_adj_calc        = fn_adj_calc
+        self.fn_brain           = fn_brain
+        if fn_brain is not None : self.fn_popup_info = fn_brain #Support for both.
         self.state_per_weight   = state_per_weight or []
         self.popup_formula      = popup_formula
+
+
 
     def optimize_sample(self, sample: RecordSample, TRI):
         """ Loop through each layer than neuron than weight"""
@@ -152,9 +161,10 @@ class StrategyOptimizer:
                 neuron.optimizer_state[state_name] = [0.0] * len(neuron.weights)
 
 # ==============================================================================
+# ==============================================================================
 # OPTIMIZER IMPLEMENTATIONS
 # ==============================================================================
-
+# ==============================================================================
 
 def sgd_popup_info(neuron, weight_id, TRI):
     """Calculate leverage. Return display values."""
@@ -184,9 +194,9 @@ def adam_popup_info(neuron, weight_id, TRI):
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # Adam hyperparameters
-    beta2       = 0.999                                     # Adam hyperparameters
-    epsilon     = 1e-8                                      # Adam hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1
+    beta2       = TRI.hyper.optimizer_beta2
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     # Bias correction
     m_hat       = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
@@ -199,17 +209,15 @@ def adam_popup_info(neuron, weight_id, TRI):
         "v_hat": v_hat,
         "timestep": timestep,
     }
-
-
 def adam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """Calculate Adam adjustment from accumulated average leverage."""
 
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # Adam hyperparameters
-    beta2       = 0.999                                     # Adam hyperparameters
-    epsilon     = 1e-8                                      # Adam hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1                                       # Adam hyperparameters
+    beta2       = TRI.hyper.optimizer_beta2                                     # Adam hyperparameters
+    epsilon     = TRI.hyper.optimizer_epsilon                                      # Adam hyperparameters
 
     # Update momentum and velocity
     m = beta1 * m + (1 - beta1) * avg_leverage
@@ -224,8 +232,8 @@ def adam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     v_hat = v / (1 - beta2 ** timestep) if timestep > 0 else 0.0
 
     # Calculate adjustment
-    lr = neuron.learning_rates[weight_id]
-    adjustment = lr * m_hat / (math.sqrt(v_hat) + epsilon)
+    lr          = neuron.learning_rates[weight_id]
+    adjustment  = lr * m_hat / (math.sqrt(v_hat) + epsilon)
 
     return adjustment
 Optimizer_Adam = StrategyOptimizer(
@@ -267,9 +275,9 @@ def adam_nohat_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     v = neuron.optimizer_state['v'][weight_id]
 
     # Adam hyperparameters
-    beta1 = 0.9
-    beta2 = 0.999
-    epsilon = 1e-8
+    beta1 = TRI.hyper.optimizer_beta1
+    beta2 = TRI.hyper.optimizer_beta2
+    epsilon = TRI.hyper.optimizer_epsilon
 
     # Update momentum and velocity
     m = beta1 * m + (1 - beta1) * avg_leverage
@@ -303,7 +311,7 @@ def nadam_popup_info(neuron, weight_id, TRI):
     m = neuron.optimizer_state['m'][weight_id]
     v = neuron.optimizer_state['v'][weight_id]
     t = TRI.timestep
-    b1, b2 = 0.9, 0.999
+    b1, b2 = TRI.hyper.optimizer_beta1, TRI.hyper.optimizer_beta2
 
     # We need the last gradient (avg_leverage) to show what the look-ahead WAS.
     # If your system doesn't store last_g, we show the biased-corrected m_hat.
@@ -322,29 +330,12 @@ def nadam_popup_info(neuron, weight_id, TRI):
         "timestep": t
     }
 
-
-def nadam_popup2_info(neuron, weight_id, TRI):
-    """Retrieves the exact state used in the last batch update."""
-    # Since these are in 'state_per_weight', they are persisted
-    m = neuron.optimizer_state['m'][weight_id]
-    v = neuron.optimizer_state['v'][weight_id]
-    m_look = neuron.optimizer_state['m_lookahead'][weight_id]
-    t = TRI.timestep
-
-    return {
-        "m": m,
-        "v": v,
-        "m_lookahead": m_look,  # No guessing!
-        "timestep": t
-    }
-
-
 def nadam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """Calculates adjustment and persists the look-ahead state."""
     m = neuron.optimizer_state['m'][weight_id]
     v = neuron.optimizer_state['v'][weight_id]
     t = TRI.timestep
-    b1, b2, eps = 0.9, 0.999, 1e-8
+    b1, b2, eps = TRI.hyper.optimizer_beta1, TRI.hyper.optimizer_beta2, TRI.hyper.optimizer_epsilon
 
     # 1. Standard Adam state updates
     m = b1 * m + (1 - b1) * avg_leverage
@@ -384,12 +375,11 @@ Optimizer_Nadam = StrategyOptimizer(
 # ==============================================================================
 
 
-
 def rmsprop_popup_info(neuron, weight_id, TRI):
     """Calculate RMSprop state for display. Return display values."""
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep    = TRI.timestep                              # Get current state
-    epsilon     = 1e-8                                      # RMSprop hyperparameters
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     sqrt_v      = math.sqrt(v)
     lr          = neuron.learning_rates[weight_id]
@@ -407,8 +397,8 @@ def rmsprop_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """RMSprop: Scales learning rate by moving average of squared gradients."""
 
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
-    beta        = 0.9                                       # RMSprop hyperparameters
-    epsilon     = 1e-8                                      # RMSprop hyperparameters
+    beta        = TRI.hyper.optimizer_beta1
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     # Update moving average of squared gradients
     v = beta * v + (1 - beta) * (avg_leverage ** 2)
@@ -419,9 +409,7 @@ def rmsprop_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     # Calculate adjustment
     lr          = neuron.learning_rates[weight_id]
     adjustment  = lr * avg_leverage / (math.sqrt(v) + epsilon)
-
     return adjustment
-
 
 Optimizer_RMSprop = StrategyOptimizer(
     name="RMSprop",
@@ -432,8 +420,6 @@ Optimizer_RMSprop = StrategyOptimizer(
     fn_adj_calc=rmsprop_calculate_adjustment,
     state_per_weight=["v"],  # ← RMSprop needs only v per weight
 )
-
-
 
 
 def momentum_popup_info(neuron, weight_id, TRI):
@@ -458,7 +444,7 @@ def momentum_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """
 
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
-    beta        = 0.9                                       # Momentum hyperparameters
+    beta        = TRI.hyper.optimizer_beta1
 
     # Update velocity (exponential moving average of gradients)
     m = beta * m + (1 - beta) * avg_leverage
@@ -490,7 +476,7 @@ def adagrad_popup_info(neuron, weight_id, TRI):
     """Calculate AdaGrad state for display. Return display values."""
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state (G)
     timestep    = TRI.timestep                              # Get current state
-    epsilon     = 1e-8                                      # AdaGrad hyperparameters
+    epsilon     = TRI.hyper.optimizer_epsilon                                      # AdaGrad hyperparameters
 
     sqrt_G      = math.sqrt(v)
     lr          = neuron.learning_rates[weight_id]
@@ -511,7 +497,7 @@ def adagrad_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """
 
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state (G)
-    epsilon     = 1e-8                                      # AdaGrad hyperparameters
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     # Accumulate squared gradients (no decay - this is key difference from RMSprop)
     v += avg_leverage ** 2
@@ -522,9 +508,7 @@ def adagrad_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     # Compute adjustment with decreasing effective learning rate
     lr          = neuron.learning_rates[weight_id]
     adjustment  = lr * avg_leverage / (math.sqrt(v) + epsilon)
-
     return adjustment
-
 
 Optimizer_AdaGrad = StrategyOptimizer(
     name="AdaGrad",
@@ -537,21 +521,18 @@ Optimizer_AdaGrad = StrategyOptimizer(
 )
 
 
-
 # ==============================================================================
 # ADAMW OPTIMIZER (Adam with Decoupled Weight Decay)
 # ==============================================================================
-
-
 
 def adamw_popup_info(neuron, weight_id, TRI):
     """Calculate AdamW state for display. Return display values."""
     m               = neuron.optimizer_state['m'][weight_id]    # Get current state
     v               = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep        = TRI.timestep                              # Get current state
-    beta1           = 0.9                                       # AdamW hyperparameters
-    beta2           = 0.999                                     # AdamW hyperparameters
-    epsilon         = 1e-8                                      # AdamW hyperparameters
+    beta1           = TRI.hyper.optimizer_beta1
+    beta2           = TRI.hyper.optimizer_beta2
+    epsilon         = TRI.hyper.optimizer_epsilon
     weight_decay    = 0.01                                      # AdamW hyperparameters
 
     # Bias correction
@@ -562,9 +543,7 @@ def adamw_popup_info(neuron, weight_id, TRI):
     scaled_lr       = lr / (math.sqrt(v_hat) + epsilon) if timestep > 0 else 0.0
 
     # Current weight for decay calculation (matches your original logic)
-
     current_weight = neuron.weights[weight_id ]
-
     wd_contribution = lr * weight_decay * current_weight
 
     return {
@@ -588,9 +567,9 @@ def adamw_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     m               = neuron.optimizer_state['m'][weight_id]    # Get current state
     v               = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep        = TRI.timestep                              # Get current state
-    beta1           = 0.9                                       # AdamW hyperparameters
-    beta2           = 0.999                                     # AdamW hyperparameters
-    epsilon         = 1e-8                                      # AdamW hyperparameters
+    beta1           = TRI.hyper.optimizer_beta1
+    beta2           = TRI.hyper.optimizer_beta2
+    epsilon         = TRI.hyper.optimizer_epsilon
     weight_decay    = 0.01                                      # AdamW hyperparameters
 
     # Update biased first moment (momentum)
@@ -618,7 +597,6 @@ def adamw_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
 
     # Total adjustment = Adam part + weight decay part
     adjustment = adam_adjustment + weight_decay_adjustment
-
     return adjustment
 
 
@@ -631,18 +609,6 @@ Optimizer_AdamW = StrategyOptimizer(
     fn_adj_calc=adamw_calculate_adjustment,
     state_per_weight=["m", "v"],  # ← AdamW needs momentum and velocity per weight
 )
-
-
-
-# ==============================================================================
-# ADADELTA OPTIMIZER (AdaGrad without learning rate!)
-# ==============================================================================
-
-
-# ==============================================================================
-# ADADELTA OPTIMIZER (AdaGrad without learning rate!)
-# ==============================================================================
-
 
 # ==============================================================================
 # ADADELTA OPTIMIZER (AdaGrad without learning rate!)
@@ -678,7 +644,7 @@ def adadelta_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
 
     m               = neuron.optimizer_state['m'][weight_id]    # Accumulated squared updates
     v               = neuron.optimizer_state['v'][weight_id]    # Accumulated squared gradients
-    rho             = 0.95                                      # Adadelta hyperparameters
+    rho             = .95                                      # Adadelta hyperparameters
     epsilon         = 1e-6                                      # Adadelta hyperparameters
 
     # Update accumulated squared gradient
@@ -719,8 +685,8 @@ def adamax_popup_info(neuron, weight_id, TRI):
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state (u_∞)
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # AdaMax hyperparameters
-    epsilon     = 1e-8                                      # AdaMax hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     # Bias-corrected momentum
     m_hat       = m / (1 - beta1 ** timestep) if timestep > 0 else 0.0
@@ -736,7 +702,6 @@ def adamax_popup_info(neuron, weight_id, TRI):
         "Scaled LR": scaled_lr,
     }
 
-
 def adamax_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     """
     AdaMax: Variant of Adam based on infinity norm.
@@ -746,9 +711,9 @@ def adamax_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state (u_∞)
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # AdaMax hyperparameters
-    beta2       = 0.999                                     # AdaMax hyperparameters
-    epsilon     = 1e-8                                      # AdaMax hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1
+    beta2       = TRI.hyper.optimizer_beta2
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     # Update biased first moment (momentum)
     m = beta1 * m + (1 - beta1) * avg_leverage
@@ -766,9 +731,7 @@ def adamax_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     # Compute adjustment (note: v doesn't need bias correction for infinity norm)
     lr          = neuron.learning_rates[weight_id]
     adjustment  = lr * m_hat / (v + epsilon) if timestep > 0 else 0.0
-
     return adjustment
-
 
 Optimizer_AdaMax = StrategyOptimizer(
     name="AdaMax",
@@ -780,8 +743,6 @@ Optimizer_AdaMax = StrategyOptimizer(
     state_per_weight=["m", "v"],  # ← AdaMax needs momentum and infinity norm estimate per weight
 )
 
-
-
 # ==============================================================================
 # RADAM OPTIMIZER (Rectified Adam)
 # ==============================================================================
@@ -791,9 +752,9 @@ def radam_popup_info(neuron, weight_id, TRI):
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # RAdam hyperparameters
-    beta2       = 0.999                                     # RAdam hyperparameters
-    epsilon     = 1e-8                                      # RAdam hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1
+    beta2       = TRI.hyper.optimizer_beta2
+    epsilon     = TRI.hyper.optimizer_epsilon
 
     if timestep <= 0:
         return {
@@ -851,9 +812,9 @@ def radam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
     m           = neuron.optimizer_state['m'][weight_id]    # Get current state
     v           = neuron.optimizer_state['v'][weight_id]    # Get current state
     timestep    = TRI.timestep                              # Get current state
-    beta1       = 0.9                                       # RAdam hyperparameters
-    beta2       = 0.999                                     # RAdam hyperparameters
-    epsilon     = 1e-8                                      # RAdam hyperparameters
+    beta1       = TRI.hyper.optimizer_beta1
+    beta2       = TRI.hyper.optimizer_beta2                                     # RAdam hyperparameters
+    epsilon     = TRI.hyper.optimizer_epsilon                                      # RAdam hyperparameters
 
     # Update moments
     m = beta1 * m + (1 - beta1) * avg_leverage
@@ -888,7 +849,6 @@ def radam_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
         adjustment = lr * m_hat
 
     return adjustment
-
 
 Optimizer_RAdam = StrategyOptimizer(
     name="RAdam",

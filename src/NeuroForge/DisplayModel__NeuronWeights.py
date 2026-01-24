@@ -551,3 +551,6 @@ class DisplayModel__NeuronWeights:
             self.right_margin,
             bar_height
         )
+
+
+

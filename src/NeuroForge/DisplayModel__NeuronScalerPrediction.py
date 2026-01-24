@@ -25,7 +25,7 @@ class DisplayModel__NeuronScalerPrediction:
 
     def __init__(self, neuron):
         self.neuron = neuron
-        self.neuron.location_top        = 39
+        self.neuron.location_top        = 46.9
 
         if self.has_scaling():
             self.ROW_SPACING = 1.69

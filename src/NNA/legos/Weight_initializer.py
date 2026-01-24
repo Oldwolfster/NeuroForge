@@ -1,10 +1,14 @@
 import random
 import math
 
-class Initializer: #TODO rename StrategyInitializer
+from src.NNA.legos._LegoBase import LegoBase
+
+
+class Initializer(LegoBase):
     """Encapsulates weight initialization strategies with proper bias handling."""
 
     def __init__(self, method, bias_method=None, name="Custom", desc="", when_to_use="", best_for=""):
+        super().__init__(name, ["weight_initializer"])
         self.method = method  # Function for weight initialization
         self.bias_method = bias_method if bias_method else lambda: random.uniform(-1, 1)  # Default uniform bias
         self.name = name

@@ -1,6 +1,8 @@
 from typing import List
 import pygame
 from itertools import chain
+
+from src.Exporters.PytorchExporter import PytorchExporter
 from src.NeuroForge import Const
 from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
 from src.NNA.utils.RamDB import RamDB
@@ -219,6 +221,11 @@ class Display_Manager:
         self.register_layer_buttons()
         self.create_outside_arrows()
 
+        exporter = PytorchExporter(Const.TRIs[0])
+        exporter.generate()
+
+
+
     def create_sample_button(self):
         info_popup              = PopupInfoButton()
         button_sample           = Button_Base(
@@ -299,11 +306,11 @@ class Display_Manager:
     def create_outside_arrows(self):
         """Create and register the outside arrows."""
         from src.NeuroForge.DisplayArrowsOutsideModel import DisplayArrowsOutsideNeuron
-        print(f"create_outside_arrows: {len(self.models)} models")
+        #print(f"create_outside_arrows: {len(self.models)} models")
         for idx, model in enumerate(self.models):
             arrows = DisplayArrowsOutsideNeuron(model, is_top=(idx == 0))
             self.outside_arrows.append(arrows)
-        print(f"outside_arrows count: {len(self.outside_arrows)}")
+        #print(f"outside_arrows count: {len(self.outside_arrows)}")
 
     def schedule_draw(self, fn: callable, *args, **kwargs):
         """Enqueue a draw-call to run after all the regular renders."""
