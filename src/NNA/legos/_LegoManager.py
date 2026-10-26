@@ -6,7 +6,7 @@ from src.NNA.legos.Activation import * #TODO CAN REMOVED - for testing only.
 
 
 class LegoManager:
-    NON_LEGO_DIMENSIONS         = ["seed", "architecture", "learning_rate", "batch_size"]
+    NON_LEGO_DIMENSIONS = ["seed", "architecture", "learning_rate", "batch_size", "target_scaler"]
     SERIALIZATION_EXCLUSIONS    = {'TRI', 'scaler', 'lego_mgr'}
 
     def __init__(self):
@@ -20,7 +20,7 @@ class LegoManager:
         self.build_registry()
         self.build_reverse_lookup()
         self.add_non_lego_dimension()
-        self.test()
+        #self.test()
 
     def discover_files(self):
         folder              = os.path.dirname(__file__)
@@ -64,6 +64,21 @@ class LegoManager:
         if serial_name not in self.reverse_lookup: raise ValueError(f"Unknown lego: {serial_name}")
         return self.reverse_lookup[serial_name]
 
+    # _LegoManager.py — add this method to LegoManager class
+    # Place after string_to_lego method
+
+    def resolve_lego_by_name(self, dimension, name_str):
+        """Resolve a lego by STAMPED_name first, then by .name within the dimension."""
+        if name_str in self.reverse_lookup:
+            return self.reverse_lookup[name_str]
+        if dimension not in self.registry or self.registry[dimension]["legos"] is None:
+            raise ValueError(f"Dimension '{dimension}' has no legos")
+        for lego in self.registry[dimension]["legos"]:
+            if lego.name == name_str:
+                return lego
+        raise ValueError(f"Unknown lego '{name_str}' for dimension '{dimension}'")
+
+
     def is_valid_dimension(self, key):
         """Check if dimension key exists in registry"""
         return key in self.registry
@@ -76,24 +91,6 @@ class LegoManager:
         """Return sorted list of all valid dimension names"""
         return sorted(self.registry.keys())
 
-    def serialize_ANYTHING(self, obj) -> dict:
-        """Serialize any object - converts lego instances to strings."""
-        result = {}
-        for attr in dir(obj):
-            value = getattr(obj, attr, None)
-            if self.should_skip(attr, value):                               continue
-
-            if self.is_lego_dimension(attr) and value is not None:
-                result[attr] = self.lego_to_string(value)
-            elif isinstance(value, list):
-                result[attr] = str(value)
-            elif hasattr(value, 'name'):  # ← ADD THIS for Scaler fallback
-                result[attr] = value.name
-            else:
-                result[attr] = value
-        return result
-
-    # _LegoManager.py - replace serialize_ANYTHING temporarily
 
     def serialize_ANYTHING(self, obj) -> dict:
         """Serialize any object - converts lego instances to strings."""
@@ -106,11 +103,13 @@ class LegoManager:
                         'loss_function', 'optimizer']:
                 skip = self.should_skip(attr, value)
                 is_lego = self.is_lego_dimension(attr)
-                print(f"  TRACE {attr}: skip={skip}, is_lego={is_lego}, value={value}")
+                #print(f"  TRACE {attr}: skip={skip}, is_lego={is_lego}, value={value}")
 
             if self.should_skip(attr, value):                               continue
-
-            if self.is_lego_dimension(attr) and value is not None:
+            if isinstance(value, dict):                                   # NEW  resolved {field: scaler} map
+                import json                                                 # NEW
+                result[attr] = json.dumps(value)
+            elif self.is_lego_dimension(attr) and value is not None:
                 result[attr] = self.lego_to_string(value)
             elif isinstance(value, list):
                 result[attr] = str(value)
@@ -174,6 +173,7 @@ class LegoManager:
 
     def diagnose_serialization(self, obj, label=""):
         """Diagnostic: Compare object attributes against registry."""
+
         print(f"\n{'=' * 60}")
         print(f"SERIALIZATION DIAGNOSTIC: {label}")
         print(f"{'=' * 60}")

@@ -1,0 +1,59 @@
+import random
+import math
+from typing import List, Tuple
+
+from src.NNA.engine.BaseArena import BaseArena
+
+
+class Trap_MarketSentiment(BaseArena):
+    """
+    Four economic indicators against a consumer confidence number, day by day across
+    several years. The indicators drift with the seasons and one reverses polarity
+    twice a year.
+
+    Lesson:       Inputs that look chaotic feeding a target that is not. Redundant,
+                  noisy and phase-shifted all at once.
+    Truth:        Consumer Confidence = 0.3 Volatility + 0.2 Sentiment
+                  - 0.025 Unemployment Claims + 0.25 Survey Skew + noise(sigma 2)
+    Solvable by:  A single neuron -- the blend is linear despite the drift.
+    Watch for:    How much easier this turns out to be than the inputs suggest.
+    """
+
+    def __init__(self, num_samples: int):
+        self.num_samples = num_samples
+
+    def generate_training_data(self) -> Tuple[List[Tuple[float, float, float, float, float]], List[str]]:
+        training_data = []
+
+        for day in range(self.num_samples):
+            t = day / 365.0  # normalize over years
+
+            # Market volatility has a seasonal bump, plus noise
+            volatility = 20 + 10 * math.sin(2 * math.pi * t) + random.gauss(0, 2)
+
+            # News sentiment is inversely related — except it drifts every year
+            sentiment = 50 + 10 * math.cos(2 * math.pi * t + random.uniform(-0.5, 0.5)) + random.gauss(0, 3)
+
+            # Unemployment claims, noisy and has some correlation to sentiment
+            unemployment = 200 + 20 * math.sin(4 * math.pi * t + 0.5) + random.gauss(0, 10)
+
+            # Public opinion — survey responses with skew and occasional polarity flips
+            if (day // 180) % 2 == 0:
+                survey_skew = 50 + 15 * math.sin(2 * math.pi * t) + random.gauss(0, 5)
+            else:
+                survey_skew = 50 - 15 * math.sin(2 * math.pi * t) + random.gauss(0, 5)
+
+            # Target is a weighted blend with drift and chaos
+            confidence = (
+                0.3 * volatility +
+                0.2 * sentiment -
+                0.25 * unemployment / 10 +
+                0.25 * survey_skew +
+                random.gauss(0, 2)
+            )
+
+            training_data.append((volatility, sentiment, unemployment, survey_skew, confidence))
+
+        return training_data, ["Volatility", "Sentiment", "Unemployment Claims", "Survey Skew", "Consumer Confidence"]
+
+# Generate a small preview of sample data

@@ -1,0 +1,59 @@
+import random
+from typing import List, Tuple
+
+from src.NNA.engine.BaseArena import BaseArena
+
+
+class Basic_Income_2Inputs_Nonlinear(BaseArena):
+    """
+    Salary where early career years are worth far more than late ones, and college
+    stops paying after the fourth year. Both effects are step changes, not curves.
+
+    Lesson:       Piecewise coefficients hiding inside what looks linear at a glance.
+    Truth:        Base 24000; Exp pays 2500/yr under 10, 1500 under 20, 500 above;
+                  College pays 4000/yr to 4 years then 2000; noise sigma 1000
+    Solvable by:  One hidden layer.
+    Watch for:    Error spiking at experience 10 and 20, where the rate changes.
+    """
+    def __init__(self, num_samples: int):
+        self.num_samples = num_samples
+
+    def generate_training_data(self) -> List[Tuple[float, float, float]]:
+        """
+        Generates training data as tuples of (Years of Experience, College, Target).
+        """
+        training_data = []
+        for _ in range(self.num_samples):
+            # Input variables
+            years_exp = random.uniform(0, 40)
+            college = random.uniform(0, 8)
+
+            # Parameters for Target (Salary Prediction)
+            base_salary = 24000
+
+            # Nonlinear growth for experience: exponential growth with plateau
+            if years_exp < 10:
+                coeff_exp = 2500
+            elif years_exp < 20:
+                coeff_exp = 1500
+            else:
+                coeff_exp = 500
+            contribution_exp = coeff_exp * years_exp
+
+            # Diminishing returns for college: strong impact up to 4 years, less after
+            if college <= 4:
+                coeff_col = 4000
+            else:
+                coeff_col = 2000
+            contribution_col = coeff_col * college
+
+            # Noise
+            noise = random.gauss(0, 1000)  # Add noise to the target for realism
+
+            # Calculate target
+            target = base_salary + contribution_exp + contribution_col + noise
+
+            # Append the tuple (inputs and outputs)
+            training_data.append((years_exp, college, target))
+
+        return training_data, ["Years Exp", "College", "Salary"]

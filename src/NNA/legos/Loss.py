@@ -201,6 +201,27 @@ Loss_BCEWithLogits = StrategyLossFunction(
 )
 """
 
+BCE_FLOOR   = 1e-300                        # Basement, not a floor.  Sits ~284 orders below SIGMOID_FLOOR.
+BCE_CEILING = math.nextafter(1.0, 0.0)      # 0.9999999999999999.  float64 has NO room for a deeper basement up here.
+
+def bce_grad_one(p, t, n):
+    """Single-sample BCE gradient.  Guards division by zero only; leaves valid probabilities untouched."""
+    pc = _clip(p, BCE_FLOOR, BCE_CEILING)
+    return -(t / pc - (1 - t) / (1 - pc)) / n
+
+
+def binary_crossentropy_derivative(y_pred, y_true):
+    """
+    Computes dL/dp for Binary Cross-Entropy.
+    The old 1e-15 clip destroyed the exact cancellation against the sigmoid derivative
+    in back_pass, silently zeroing blame on saturated neurons from z = -35 downward.
+    """
+    n     = _get_n(y_true)
+    preds = y_pred if n > 1 else [y_pred]
+    trues = y_true if n > 1 else [y_true]
+    grads = [bce_grad_one(p, t, n) for p, t in zip(preds, trues)]
+    return grads if n > 1 else grads[0]
+
 # 🔹 **3. Binary Cross-Entropy (BCE) Loss**
 def _clip(x, low, high):
     return high if x > high else low if x < low else x
@@ -218,7 +239,7 @@ def binary_crossentropy_loss(y_pred, y_true, epsilon=1e-15):
         losses.append(-(t * math.log(pc) + (1 - t) * math.log(1 - pc)))
     return sum(losses) / n
 
-def binary_crossentropy_derivative(y_pred, y_true, epsilon=1e-15):
+def binary_crossentropy_derivativeOld(y_pred, y_true, epsilon=1e-15):
     """
     Computes the derivative of the Binary Cross-Entropy loss.
     """
@@ -243,53 +264,132 @@ Loss_BCE = StrategyLossFunction(
     allowed_activations= [Activation_Sigmoid]
 )
 
-# 🔹 **5. Hinge Loss**
 def hinge_loss(y_pred, y_true):
     """
-    Computes the Hinge loss. Assumes y_true is +1 or -1.
+    Standard Hinge Loss. L = max(0, 1 - y_true * y_pred)
+    Assumes y_true is +1 or -1.
     """
     n      = _get_n(y_true)
     preds  = y_pred if n > 1 else [y_pred]
     trues  = y_true if n > 1 else [y_true]
-    vals   = [max(0, 1 - t * p) for p, t in zip(preds, trues)]
+    vals   = [max(0, 1.0 - t * p) for p, t in zip(preds, trues)]
     return sum(vals) / n
 
 def hinge_derivative(y_pred, y_true):
     """
-    Derivative of the Hinge loss.
+    Derivative of Standard Hinge.
+    Returns -t if within the margin, else 0.
     """
     n      = _get_n(y_true)
     preds  = y_pred if n > 1 else [y_pred]
     trues  = y_true if n > 1 else [y_true]
     grads  = []
     for p, t in zip(preds, trues):
-        margin = 1 - t * p
-        grad   = -t * margin if margin > 0 else 0
+        # If margin > 0, we are still 'wrong' or 'too close'
+        # The derivative of (1 - t*p) with respect to p is -t
+        grad = -t if (1.0 - t * p) > 0 else 0.0
         grads.append(grad / n)
     return grads if n > 1 else grads[0]
 
 Loss_Hinge = StrategyLossFunction(
     loss               = hinge_loss,
     derivative         = hinge_derivative,
-    name               = "Hinge Loss",
+    name               = "Hinge Loss (Standard)",
     short_name         = "Hinge",
-    desc               = "Used primarily for maximum-margin classification (e.g., SVMs).",
-    when_to_use        = "Useful for support vector machines and related models.",
-    best_for           = "Binary classification with margin-based methods.",
-    derivative_formula = "where(1 - target * prediction > 0, -target * margin, 0) / n",
+    desc               = "The classic SVM loss. Constant 'push' until the margin is satisfied.",
+    when_to_use        = "Maximum-margin classification where you want a steady learning signal.",
+    best_for           = "Hard-margin binary classification.",
+    derivative_formula = "if (1 - t*p > 0) then -t else 0",
     allowed_activations= [Activation_NoDamnFunction]
 )
 
-# 🔹 Log-Cosh Loss**
-def logcosh_loss(y_pred, y_true):
+def squared_hinge_loss(y_pred, y_true):
     """
-    Computes the Log-Cosh loss.
+    Squared Hinge Loss. L = 0.5 * max(0, 1 - y_true * y_pred)^2
     """
     n      = _get_n(y_true)
     preds  = y_pred if n > 1 else [y_pred]
     trues  = y_true if n > 1 else [y_true]
-    vals   = [math.log(math.cosh(p - t)) for p, t in zip(preds, trues)]
+    vals   = [0.5 * max(0, 1.0 - t * p)**2 for p, t in zip(preds, trues)]
     return sum(vals) / n
+
+def squared_hinge_derivative(y_pred, y_true):
+    """
+    Derivative of Squared Hinge.
+    Signal scales with the size of the error (the margin).
+    """
+    n      = _get_n(y_true)
+    preds  = y_pred if n > 1 else [y_pred]
+    trues  = y_true if n > 1 else [y_true]
+    grads  = []
+    for p, t in zip(preds, trues):
+        margin = 1.0 - t * p
+        # Derivative of 0.5 * (margin)^2 * (-t) = -t * margin
+        grad = -t * margin if margin > 0 else 0.0
+        grads.append(grad / n)
+    return grads if n > 1 else grads[0]
+
+Loss_SquaredHinge = StrategyLossFunction(
+    loss               = squared_hinge_loss,
+    derivative         = squared_hinge_derivative,
+    name               = "Squared Hinge Loss",
+    short_name         = "SqHinge",
+    desc               = "A smoother version of Hinge that punishes larger errors quadratically.",
+    when_to_use        = "When standard Hinge is too 'jittery' near the margin boundary.",
+    best_for           = "Binary classification where outliers need a stronger correction.",
+    derivative_formula = "if (margin > 0) then -target * margin else 0",
+    allowed_activations= [Activation_NoDamnFunction]
+)
+
+
+
+# 🔹 Log-Cosh Loss**
+# ══════════════════════════════════════════════════════════════════════════════
+# Loss.py — module-level functions, column 0.  No 'deleteme' wrapper needed.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Loss.py  function: logcosh_one   NEW:  log(cosh(x)) that cannot overflow.  Place above logcosh_loss.
+def logcosh_one(x):
+    ax = abs(x)                                     # exp() only ever sees a negative argument
+    return ax + math.log1p(math.exp(-2.0 * ax)) - 0.6931471805599453   # log(2)
+
+
+# Loss.py  function: stable_sigmoid   NEW:  Overflow-proof sigmoid.  Same form as Activation.py:55.
+def stable_sigmoid(z):
+    if z >= 0:      return 1.0 / (1.0 + math.exp(-z))
+    exp_z           = math.exp(z)                   # z < 0, so exp_z is tiny
+    return exp_z / (1.0 + exp_z)
+
+
+# Loss.py  function: logcosh_loss   Update:  math.log(math.cosh(x)) -> logcosh_one(x).   THIS WAS CRASH A.
+def logcosh_loss(y_pred, y_true):
+    """
+    Computes the Log-Cosh loss.
+    log(cosh(x)) == |x| + log1p(exp(-2|x|)) - log(2).  Exact for every float.
+    """
+    n      = _get_n(y_true)
+    preds  = y_pred if n > 1 else [y_pred]
+    trues  = y_true if n > 1 else [y_true]
+    vals   = [logcosh_one(p - t) for p, t in zip(preds, trues)]
+    return sum(vals) / n
+
+
+# Loss.py  function: weighted_bce_derivative   Update:  nested _sigmoid dropped for stable_sigmoid.  THIS WAS CRASH B.
+def weighted_bce_derivative( y_pred, y_true, pos_weight=1.0, neg_weight=1.0):
+    """
+    dL/d(logit) = w_class * (sigmoid(logit) - y)
+    """
+    n      = _get_n(y_true)
+    logits = y_pred if n > 1 else [y_pred]
+    trues  = y_true if n > 1 else [y_true]
+
+    grads = []
+    for z, y in zip(logits, trues):
+        p   = stable_sigmoid(z)
+        w   = pos_weight if y == 1 else neg_weight
+        # average over batch (keep parity with your Log-Cosh style)
+        grads.append(w * (p - y) / n)
+    return grads if n > 1 else grads[0]
 
 def logcosh_derivative(y_pred, y_true):
     """
@@ -436,7 +536,7 @@ def weighted_bce_loss(y_pred, y_true, pos_weight=1.0, neg_weight=1.0):
             vals.append(w * _softplus(z))
     return sum(vals) / n
 
-def weighted_bce_derivative(self, y_pred, y_true, pos_weight=1.0, neg_weight=1.0):
+def weighted_bce_derivative( y_pred, y_true, pos_weight=1.0, neg_weight=1.0):
     """
     dL/d(logit) = w_class * (sigmoid(logit) - y)
     """
@@ -494,7 +594,7 @@ def focal_loss( y_pred, y_true, alpha=0.25, gamma=2.0):
         vals.append(-alpha * ((1.0 - p_t) ** gamma) * log_pt)
     return sum(vals) / n
 
-def focal_derivative(self, y_pred, y_true, alpha=0.25, gamma=2.0):
+def focal_derivative( y_pred, y_true, alpha=0.25, gamma=2.0):
     """
     dFL/dz (logit) — numerically stable form via p_t with chain rule.
     Let t = +1 if y=1 else -1; p_t = sigmoid(t*z).
@@ -503,9 +603,10 @@ def focal_derivative(self, y_pred, y_true, alpha=0.25, gamma=2.0):
                                           + (1 - p_t)^gamma * (1/p_t) ]
     """
     import math
-    def _sigmoid(z): return 1.0 / (1.0 + math.exp(-z))
-    def _softplus(x): return math.log1p(math.exp(-abs(x))) + max(x, 0.0)
+    def _sigmoid(z):     return 1.0 / (1.0 + math.exp(-z))
 
+    def _softplus(x): return math.log1p(math.exp(-abs(x))) + max(x, 0.0)
+    #print(1/0)
     n      = _get_n(y_true)
     logits = y_pred if n > 1 else [y_pred]
     trues  = y_true if n > 1 else [y_true]
@@ -566,5 +667,4 @@ Loss_HalfWit = StrategyLossFunction(
 
 __all__ = [name for name, obj in globals().items()
            if isinstance(obj, StrategyLossFunction)]
-
 

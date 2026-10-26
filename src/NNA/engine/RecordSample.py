@@ -4,6 +4,7 @@ from dataclasses import dataclass
 class RecordSample:
     run_id: int
     epoch: int
+    phase: int
     sample_id: int
     inputs: str  # Serialized as JSON
     inputs_unscaled: str  # Serialized as JSON

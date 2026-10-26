@@ -85,10 +85,14 @@ def is_numeric(text):
 def format_percent(x: float, decimals: int = 2, max_value: float = 1000.0) -> str:
     """
     Format a fraction x (e.g. 0.9999) as a percentage string:
+      • None / missing        → "—"
       • two decimal places normally → "99.99%"
       • no trailing .00 → "100%"
       • gradient explosions → "OVERFLOW"
     """
+    if x is None:                                                   # NEW
+        return "—"                                                  # NEW
+
     # Check for gradient explosion (anything beyond max_value)
     if abs(x) > max_value:
         return "OVERFLOW" if x > 0 else "-OVERFLOW"
@@ -97,7 +101,6 @@ def format_percent(x: float, decimals: int = 2, max_value: float = 1000.0) -> st
     s = f"{x:.{decimals}f}"
     s = s.rstrip("0").rstrip(".")
     return s + "%"
-
 
 def wrap_text(text, max_len):
     """Wrap text to max_len characters per line, breaking at word boundaries."""
@@ -153,3 +156,43 @@ def smart_format(num):
 def store_num(number):
     formatted = f"{number:,.6f}"
     return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+
+
+def left(text: str, n: int) -> str:
+    if text is None:
+        return ""
+    if n <= 0:
+        return ""
+    if n >= len(text):
+        return text
+    return text[:n]
+
+def right(text: str, n: int) -> str:
+    if text is None:
+        return ""
+    if n <= 0:
+        return ""
+    if n >= len(text):
+        return text
+    return text[-n:]
+
+def mid(text: str, start: int, length: int) -> str:
+    """
+    1-based start index (like VB / Access):
+      mid("abcdef", 1, 2) -> "ab"
+      mid("abcdef", 3, 2) -> "cd"
+    """
+    if text is None:
+        return ""
+    if length <= 0:
+        return ""
+    if start <= 0:
+        start = 1
+
+    # convert 1-based start to 0-based
+    zero_start = start - 1
+    if zero_start >= len(text):
+        return ""
+
+    end = zero_start + length
+    return text[zero_start:end]

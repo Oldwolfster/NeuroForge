@@ -87,6 +87,66 @@ Initializer_Xavier = Initializer(
     best_for="Sigmoid, Tanh."
 )
 
+import math
+import numpy as np  # Assuming you use NumPy for rand_uniform; adjust if not
+
+
+def calculate_gain(nonlinearity='linear'):
+    """Optional: Auto-compute gain like PyTorch."""
+    if nonlinearity == 'sigmoid':
+        return 1.0
+    elif nonlinearity == 'tanh':
+        return 5.0 / 3  # ≈1.6667
+    elif nonlinearity == 'relu':
+        return math.sqrt(2.0)
+    else:
+        return 1.0  # Default/fallback
+
+
+# Assuming your rand_uniform(low, high, shape) generates uniform random in [low, high]
+# And _dims(shape) returns [fan_in, fan_out] or equivalent
+"""GROK XAVIER IMPROVEMENTS
+Initializer_Xavier = Initializer(
+    method=lambda shape, gain=1.0, mode='fan_avg', distribution='uniform', nonlinearity=None:
+# Auto-override gain if nonlinearity provided
+if nonlinearity:
+    gain *= calculate_gain(nonlinearity)
+
+# Compute fan_in and fan_out (adjust _dims if needed for conv)
+fan_in, fan_out = _dims(shape)
+
+# Choose fan based on mode
+if mode == 'fan_in':
+    fan = fan_in
+factor = 3  # For uniform variance preservation
+elif mode == 'fan_out':
+fan = fan_out
+factor = 3
+else:  # 'fan_avg' default like original Glorot
+fan = fan_in + fan_out
+factor = 6  # 6 = 3*2 for avg
+
+# Core limit/std calc
+if distribution == 'uniform':
+    limit = math.sqrt(factor / fan) * gain
+return rand_uniform(-limit, limit, shape)
+elif distribution == 'normal':
+std = math.sqrt(2.0 / fan) * gain  # Gaussian variant (factor 2 instead of 3/6)
+return rand_normal(0, std, shape)  # Assume you have rand_normal(mean, std, shape)
+else:
+raise ValueError("Invalid distribution: use 'uniform' or 'normal'"),
+
+bias_method = lambda: 0,
+
+name = "Xavier (Glorot)",
+desc = "Scales weights based on number of inputs/outputs to maintain signal propagation. Supports gain for activation tuning.",
+when_to_use = "Good for Sigmoid/Tanh activations in shallow networks. Use gain>1 for larger weights.",
+best_for = "Sigmoid, Tanh."
+)
+"""
+
+
+
 # 🔹 **4. He (Kaiming) Initialization** - Optimized for **ReLU-based activations**
 Initializer_He = Initializer(
     method=lambda shape: rand_normal(0, math.sqrt(2 / _dims(shape)[0]), shape),

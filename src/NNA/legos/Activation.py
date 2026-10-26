@@ -30,18 +30,37 @@ Activation_ReLU         = StrategyActivation(
     function            = lambda x: x if x > 0 else 0,
     derivative          = lambda x: 1 if x > 0 else 0,
     bd_defaults         = [0, 1, 0.5],
-    name                = "NoneDummmy"
+    name                = "Relu"
 )
 
 Activation_NoDamnFunction = StrategyActivation(
     function=lambda x: x,
     derivative=lambda x: 1,
     bd_defaults=[-1, 1, 0],
-    name="NoneDummmy"
+    name="Linear"
 )
+
+SIGMOID_FLOOR   = 1e-16                 # A sigmoid never truly reaches 0 or 1.  float64 disagrees; we overrule it.
+SIGMOID_CEILING = 1.0 - SIGMOID_FLOOR   # Stored, not recomputed.  Rounds to 0.9999999999999999 - the last double below 1.0.
+
+def clamp_probability(p):
+    """Enforce the mathematical reality that a sigmoid output lies strictly between 0 and 1."""
+    if p < SIGMOID_FLOOR:       return SIGMOID_FLOOR
+    if p > SIGMOID_CEILING:     return SIGMOID_CEILING
+    return p
+
+
+def sigmoid_raw(x):
+    """Overflow-safe sigmoid.  Each branch keeps exp() away from the rail it would blow up on."""
+    if x >= 0:      return 1 / (1 + math.exp(-x))
+    exp_x           = math.exp(x)
+    return exp_x / (1 + exp_x)
 
 
 def sigmoid_stable(x):
+    """Numerically stable sigmoid that never returns exactly 0.0 or 1.0."""
+    return clamp_probability(sigmoid_raw(x))
+def sigmoid_stableOld(x):
     """Numerically stable sigmoid to prevent overflow."""
     if x >= 0:
         # For positive x, use standard formula

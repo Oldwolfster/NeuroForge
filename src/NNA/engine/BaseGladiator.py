@@ -8,7 +8,8 @@ from src.NNA.engine.Config import Config
 from src.NNA.engine.TrainingRunInfo import TrainingRunInfo
 from src.NNA.engine.Neuron       import Neuron
 from datetime                    import datetime
-from src.NNA.utils.snapshot_weights import snapshot_weights
+from src.NNA.utils.snapshot_weights import snapshot_weights, restore_weights
+
 
 class Gladiator(ABC):
     """
@@ -36,6 +37,7 @@ class Gladiator(ABC):
         self.configure_everything()
 
     def configure_model  (self, config: Config): pass  # Typically overwritten in child  class.
+
     def customize_neurons(self, config: Config): pass  # Typically overwritten in child  class.
 
     def configure_everything(self):
@@ -44,7 +46,7 @@ class Gladiator(ABC):
         self.config.autoML()
         self.initialize_neurons()
         self.customize_neurons(self.config)            # Typically overwritten in child  class.
-        self.config.scaler.scale_all()
+        self.TRI.scale_inputs(self.config.scaler)
         self.config.loss_function.validate_activation_functions()
 
     def initialize_neurons(self):
@@ -67,7 +69,7 @@ class Gladiator(ABC):
                     activation          = self.config.output_activation  if is_output_layer else self.config.hidden_activation
                 )
 
-    def train(self, exploratory_epochs = 0):
+    def trainOld(self, exploratory_epochs = 0):
         """
         Main method invoked from Framework to train model.
 
@@ -76,14 +78,36 @@ class Gladiator(ABC):
         Returns:
             None
         """
-        #epochs_to_run = self.TRI.hyper.epochs_to_run if exploratory_epochs == 0 else exploratory_epochs
         epochs_to_run = self.TRI.get_epochs(exploratory_epochs)
-        #print(f"epoch_to_run{epochs_to_run}")
-        for epoch in range(1, epochs_to_run + 1):                       # Loop to run specified # of epochs
-            if should_print_epoch(epoch,exploratory_epochs):            print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.last_mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            self.TRI.converge_cond = self.run_an_epoch(epoch)           # Call function to run single epoch
-            if self.TRI.converge_cond != "No Early Stopping":   return   # Converged so end early
 
+        for epoch in range(1, epochs_to_run + 1):
+            self.TRI.converge_cond = self.run_an_epoch(epoch)
+            if should_print_epoch(epoch, exploratory_epochs):   print(f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.last_mae} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            if self.TRI.converge_cond != "No Early Stopping":   return  # Converged so end early
+
+    # BaseGladiator.py
+    def train(self, exploratory_epochs=0):
+        """Main method invoked from Framework to train model."""
+        epochs_to_run = self.TRI.get_epochs(exploratory_epochs)
+        self.run_all_epochs(epochs_to_run, exploratory_epochs)
+        self.run_the_test()
+
+    def run_all_epochs(self, epochs_to_run, exploratory_epochs):
+        for epoch in range(1, epochs_to_run + 1):
+            self.TRI.converge_cond = self.run_an_epoch(epoch)
+            if should_print_epoch(epoch, exploratory_epochs):   print(
+                f"Epoch: {epoch} for {self.TRI.gladiator} MAE = {self.TRI.last_mae[0]} ({round(self.TRI.accuracy)}%)at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            if self.TRI.converge_cond != "No Early Stopping":   return
+
+    def run_the_test(self):
+        """One pass over never-seen data wearing the crowned weights. Never during a sweep."""
+        if self.TRI.is_lr_sweep:                return
+        if self.TRI.data[2] is None:            return
+        if self.TRI.optimum_weights is None:    return
+        restore_weights(self.TRI.optimum_weights)
+        self.epoch = self.TRI.optimum_epoch  # so sample rows key to the real epoch
+        self.run_an_epoch_phase(2)
+        self.TRI.record_epoch(self.epoch, 2)
 
     def run_an_epoch(self, epoch: int) -> str:
         """
@@ -95,22 +119,35 @@ class Gladiator(ABC):
             convergence_signal (str): If not converged, empty string, otherwise signal that detected convergence
         """
         self.epoch = epoch  # Set so the child model has access
-        for self.sample_id, (sample, sample_unscaled) in enumerate(zip(self.config.scaler.scaled_samples, self.config.scaler.unscaled_samples), start=1        ):
-            if self.run_a_sample(sample, sample_unscaled) == "Gradient Explosion":  return "Gradient Explosion"
-        return self.TRI.record_epoch(epoch)  # Finish epoch and return convergence signal
 
-    def run_a_sample(self, sample, sample_unscaled):
+        if signal := self.run_an_epoch_phase(0): return signal # Training   Epoch - Adjust weights
+        self.TRI.record_epoch(epoch,0)
+        if signal := self.run_an_epoch_phase(1): return signal
+        return self.TRI.record_epoch(epoch,1)
+
+    def run_an_epoch_phase(self, phase) -> str:
+        return self.iterate_samples(
+            self.TRI.data_for_phase(phase,True), # training_data_scaled,
+            self.TRI.data_for_phase(phase,False),
+            phase
+        )
+    def iterate_samples(self, samples_scaled, samples_unscaled, phase):
+        for self.sample_id, (sample, sample_unscaled) in enumerate(zip(samples_scaled, samples_unscaled), start=1):
+            if signal := self.run_a_sample(sample, sample_unscaled, phase): return signal  # any truthy signal = quit
+
+    def run_a_sample(self, sample, sample_unscaled, phase):
         snapshot_weights                ("", "_before")
-        error, loss, blame              = self.run_passes(sample)
+        error, loss, blame              = self.run_passes(sample,phase)
         if error                        == "Gradient Explosion":       return error
         prediction_raw                  = Neuron.output_neuron.activation_value
-        prediction_unscaled             = self.config.scaler.unscale_target(prediction_raw)
+        prediction_unscaled             = self.config.scaler.unscale_target(self.TRI.scaler_params, prediction_raw)
         prediction_thresh, label        = self.TRI.BD.decide(prediction_unscaled)
         is_true                         = self.TRI.BD.is_true(prediction_unscaled, sample_unscaled[-1])
 
         sample_results = RecordSample(
             run_id              = self.TRI.run_id,
             epoch               = self.epoch,
+            phase               = phase,
             sample_id           = self.sample_id,
             inputs              = dumps(sample[:-1]),
             inputs_unscaled     = dumps(sample_unscaled[:-1]),
@@ -126,13 +163,14 @@ class Gladiator(ABC):
             loss_gradient       = blame,
         )
 
-        self.config.optimizer.optimize_sample(sample_results,self.TRI)
-        return self.TRI.record_sample(sample_results, self.blame_calculations)
+        if phase==0: self.config.optimizer.optimize_sample(sample_results,self.TRI) # could this be moved either up or maybe to run_passes  it feels like part of backpass
+        return self.TRI.record_sample(sample_results, self.blame_calculations,phase)
 
-    def run_passes(self, sample_scaled):
+    def run_passes(self, sample_scaled, phase):
         prediction_raw = self.forward_pass(sample_scaled)
+        #if self.has_gradient_explosion():         return "Gradient Explosion", None, None
         error_scaled, loss, loss_gradient = self.judge_pass(sample_scaled, prediction_raw)
-        self.back_pass(loss_gradient)
+        if phase==0: self.back_pass(loss_gradient)
         if self.has_gradient_explosion():         return "Gradient Explosion", None, None
         return error_scaled, loss, loss_gradient
 
@@ -143,7 +181,8 @@ class Gladiator(ABC):
             for neuron in layer:
                 for val in [neuron.accepted_blame, neuron.activation_value] + neuron.weights:
                     if val is None:                        continue
-                    if math.isnan(val) or math.isinf(val) or abs(val) > 1e21:   return True
+                    if math.isnan(val) or math.isinf(val) or abs(val) > 1e21:   return True   # DELETE
+                    if math.isnan(val) or math.isinf(val) or abs(val) > 1e12:   return True   # NEW
         return False
 
     def forward_pass(self, sample):

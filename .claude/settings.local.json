@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/SynologyDrive/Development/PyCharm/IdiotProofUIV3/src/ipui/widgets/*.py)",
+      "Bash(sed 's/.*\\\\.//')",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"from ipui import *; print\\('import OK'\\)\")",
+      "Bash(grep:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git:*)"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

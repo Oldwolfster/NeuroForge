@@ -1,0 +1,74 @@
+import csv
+from urllib.request import urlopen
+from io import StringIO
+import random
+
+from src.NNA.engine.BaseArena import BaseArena
+
+
+
+
+class Real_Titanic_OneHot(BaseArena):
+    """
+    Real data. Titanic survival with Embarked one-hot encoded into three columns
+    instead of an ordinal (9 inputs).
+    Third rung: isolates the cost of pretending a category is a number.
+    """
+    def __init__(self, num_samples=None):
+        self.num_samples = num_samples
+
+    def generate_training_data(self):
+        data = Real_Titanic_OneHot.load_titanic_data_onehot()
+
+        if self.num_samples:
+            if self.num_samples < len(data):
+                data = random.sample(data, self.num_samples)
+
+        labels = ["Pclass", "Sex", "Age", "SibSp", "Parch", "Fare",
+                  "Embarked_S", "Embarked_C", "Embarked_Q", "Outcome"]
+        return data, labels, ["Died", "Survived"]
+
+    @staticmethod
+    def load_titanic_data_onehot():
+        url = "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/titanic.csv"
+        response = urlopen(url)
+        csv_text = response.read().decode('utf-8')
+        reader = csv.DictReader(StringIO(csv_text))
+
+        data = []
+        for row in reader:
+            try:
+                # Ensure no missing values in selected fields
+                required_fields = ["pclass", "sex", "age", "sibsp", "parch", "fare", "embarked", "survived"]
+                if all(row.get(k) is not None and row[k].strip() != "" for k in required_fields):
+                    # Convert and encode values
+                    pclass = int(row["pclass"].strip())
+
+                    sex_str = row["sex"].strip().lower()
+                    sex = 0 if sex_str == "male" else 1 if sex_str == "female" else None
+                    if sex is None:
+                        continue
+
+                    age = float(row["age"].strip())
+                    sibsp = int(row["sibsp"].strip())
+                    parch = int(row["parch"].strip())
+                    fare = float(row["fare"].strip())
+
+                    # One-hot encode embarkation port
+                    embarked_str = row["embarked"].strip().upper()
+                    embarked_S = 1 if embarked_str == "S" else 0
+                    embarked_C = 1 if embarked_str == "C" else 0
+                    embarked_Q = 1 if embarked_str == "Q" else 0
+
+                    # Skip if none of the valid ports
+                    if embarked_S + embarked_C + embarked_Q == 0:
+                        continue
+
+                    survived = int(row["survived"].strip())
+
+                    data.append((pclass, sex, age, sibsp, parch, fare,
+                                 embarked_S, embarked_C, embarked_Q, survived))
+            except (ValueError, KeyError, AttributeError):
+                continue
+
+        return data

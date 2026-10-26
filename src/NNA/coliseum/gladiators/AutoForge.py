@@ -12,7 +12,7 @@ from src.NNA.engine.Neuron import Neuron
 
 
 class AutoForge_TEMPLATE(Gladiator):
-    """ AutoForge -  A ⚡imple Yet Powerful Neural Network ⚡
+    """ AutoForge -  Simple Yet Powerful Neural Network ⚡
         ✅ Auto-tuned learning rate
         ✅ Flexible architecture with preconfigured alternatives
         🛡️ If you are having problems, comment everything out and try the 'smart defaults'
@@ -22,19 +22,20 @@ class AutoForge_TEMPLATE(Gladiator):
         """ 👉  Anything prior to initializing neurons goes here
             💪  For example setting config options.        """
 
-        #config.architecture            = [2,4,1]
-        #config.optimizer                = Optimizer_Adam_NoHat
-        config.learning_rate           = 0.5
+        #config.architecture            = [8,4,1]
+        #config.optimizer                = Optimizer_Adam
+        #config.learning_rate           = 0.5
         #config.weight_initializer      = Initializer_Xavier
-        config.hidden_activation       = Activation_Tanh
+        #config.hidden_activation       = Activation_Tanh
         #config.output_activation       = Activation_Sigmoid
-        #config.loss_function           = Loss_BCE
-        config.batch_size              = 4
+        #config.loss_function           = Loss_HalfWit
+        #config.batch_size              = 4
         #config.roi_mode                = ROI_Mode.MOST_ACCURATE    #SWEET_SPOT(Default), ECONOMIC or MOST_ACCURATE
-        config.input_scalers           = Scaler_ZScore                                 # All inputs same scaler
+        #config.input_scalers           = Scaler_ZScore                                 # All inputs same scaler
         #config.input_scalers           = [Scaler_MinMax, Scaler_MinMax, Scaler_MinMax, Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax,Scaler_MinMax, Scaler_Robust]
         #config.target_scaler           = Scaler_NONE #Scaler_NONE # Scaler_MinMax
-        """config.input_scalers = [
+        """
+        config.input_scalers = [
             Scaler_MinMax,  # Pclass
             Scaler_NONE,  # Sex already 0 and 1
             Scaler_MinMax,  # Age
@@ -45,7 +46,8 @@ class AutoForge_TEMPLATE(Gladiator):
             Scaler_NONE,  # Embarked_C - one hot encoded
             Scaler_NONE  # Embarked_Q - one hot encoded
         ]
-         GBS Gospel
+   
+        # GBS Gospel
         config.input_scalers = [
             Scaler_MinMax,  # Pclass
             Scaler_NONE,  # Sex already 0 and 1

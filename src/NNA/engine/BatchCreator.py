@@ -2,32 +2,36 @@
 from src.ArenaSettings import HyperParameters
 import random
 from src.NNA.legos._LegoManager import LegoManager
-from src.NNA.utils.db_prep_disk import check_batch_schema
+
 from pathlib import Path
 from itertools import product
+import json
+
+from src.NNA.utils.enums import RecordLevel
+
 
 class BatchCreator:
     def __init__(self, hyper: HyperParameters):
         self.hyper          = hyper
-        self.conn           = hyper.db_dsk.conn
-        check_batch_schema  ( hyper.db_dsk.conn)
+        self.conn           = hyper.nf_db.conn  # NEW
         self.lego_mgr       = LegoManager()
 
-    def create_new_batch(self):
-        """Create a brand new batch - will fail if run_ids collide."""
+    def create_new_batch(self, batch_id=None):
+        """batch_id=None: standalone — we mint the batch row. Given: NF minted it, we stamp expected_runs."""
         dimensions = self.prep_dimensions()
         dimensions = self.expand_wildcards(dimensions)
         dim_keys = list(dimensions.keys())
         dim_values = [dimensions[k] for k in dim_keys]
-        batch_id = self.save_batch()
-        print(f"Creating NEW batch #{batch_id}")
-        run_number = 0
 
+        if batch_id is None:
+            batch_id = self.save_batch(dimensions)
+        else:
+            self.stamp_expected_runs(batch_id, dimensions)
+        print(f"Creating NEW batch #{batch_id} in db {self.hyper.nf_db.db_path}")
         for gladiator in self.hyper.gladiators:
             lr_flag = self.is_lr_overriding_sweep(gladiator, dim_keys)
             for arena in self.hyper.arenas:
                 for combo in product(*dim_values):
-                    run_number += 1
                     run_config = dict(zip(dim_keys, combo))
                     run_config['gladiator'] = gladiator
                     run_config['arena'] = arena
@@ -35,65 +39,12 @@ class BatchCreator:
                     self.save_training_run(run_config, batch_id)
         return batch_id
 
-    def resume_existing_batch(self, batch_id: int):
-        """Resume an existing batch - only adds runs that don't exist yet."""
-        print(f"Resuming batch #{batch_id}")
-        cursor = self.conn.cursor()
-
-        # Get highest run_id so far
-        cursor.execute('SELECT COALESCE(MAX(run_id), 0) FROM batch_details WHERE batch_id = ?', (batch_id,))
-        next_run_id = cursor.fetchone()[0] + 1
-
-        dimensions = self.prep_dimensions()
-        dimensions = self.expand_wildcards(dimensions)
-        dim_keys = list(dimensions.keys())
-        dim_values = [dimensions[k] for k in dim_keys]
-
-        for gladiator in self.hyper.gladiators:
-            lr_flag = self.is_lr_overriding_sweep(gladiator, dim_keys)
-            for arena in self.hyper.arenas:
-                for combo in product(*dim_values):
-                    run_config = dict(zip(dim_keys, combo))
-                    run_config['gladiator'] = gladiator
-                    run_config['arena'] = arena
-                    run_config['lr_specified'] = lr_flag
-
-                    # Check if this config already exists
-                    if not self.run_exists(batch_id, run_config):
-                        self.save_training_run(run_config, batch_id, next_run_id)
-                        next_run_id += 1
-
-        return batch_id
-
-    def run_exists(self, batch_id: int, run_config: dict) -> bool:
-        """Check if a run with this exact config already exists."""
-        cursor = self.conn.cursor()
-
-        # Build WHERE clause for all config keys
-        conditions = []
-        params = [batch_id]
-
-        for key, value in run_config.items():
-            serialized = self.serialize_value(key, value)
-            conditions.append(f"(key = ? AND value = ?)")
-            params.extend([key, serialized])
-
-        query = f'''
-            SELECT run_id, COUNT(*) as match_count
-            FROM batch_details
-            WHERE batch_id = ? AND ({' OR '.join(conditions)})
-            GROUP BY run_id
-            HAVING match_count = ?
-        '''
-        params.append(len(run_config))
-        cursor.execute(query, params)
-        return cursor.fetchone() is not None
-
     def serialize_value(self, key, value):
-        """Serialize a value for storage."""
-        if key in ['gladiator', 'arena', 'lr_specified']:   return str(value)
-        elif self.lego_mgr.is_lego_dimension(key):          return self.lego_mgr.lego_to_string(value)
-        else:                                               return str(value)
+        """Column-ready. Naming IS wiring: key IS the batch_history column."""
+        if key == 'lr_specified':                    return int(bool(value))
+        if isinstance(value, (int, float)):          return value
+        if self.lego_mgr.is_lego_dimension(key):     return self.lego_mgr.lego_to_string(value)
+        return str(value)                            # gladiator, arena, architecture list
 
     def prep_dimensions_orig(self):
         dimensions = self.validate_dimensions(self.hyper.dimensions)
@@ -114,7 +65,7 @@ class BatchCreator:
             remaining = self.hyper.seed_replicates - len(seeds)
             seeds.extend([random.randint(1, 999999) for _ in range(remaining)])
             dimensions["seed"] = seeds if seeds else [random.randint(1, 999999)]
-            return dimensions
+        return dimensions
 
     def ensure_output_neuron(self, dimensions: dict) -> None:
         if "architecture" not in dimensions: return
@@ -160,45 +111,37 @@ class BatchCreator:
                     return True
         return False
 
-    def save_batch(self) -> int:
+    def save_batch(self, dimensions) -> int:
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO batch_specs (
-                batch_name, batch_notes, dimensions, gladiators, arenas
-            ) VALUES (?, ?, ?, ?, ?)
+            INSERT INTO batch (batch_name, batch_notes, config, expected_runs)
+            VALUES (?, ?, ?, ?)
         ''', (
             self.hyper.batch_name,
             self.hyper.batch_notes,
-            str(self.hyper.dimensions),
-            str(self.hyper.gladiators),
-            str(self.hyper.arenas),
+            self.build_config_json(dimensions),
+            self.count_expected_runs(dimensions),
         ))
         self.conn.commit()
         print("Saved batch")
         return cursor.lastrowid
 
+    # BatchCreator.py  method: save_training_run  Update: full intent into the pending batch_history row; batch_details is dead
     def save_training_run(self, run_config: dict, batch_id: int):
-        """Save run as key-value pairs in batch_details table."""
-        cursor = self.conn.cursor()
-
-        # Create history record FIRST - this generates the run_id (PK)
-        cursor.execute('''
-            INSERT INTO batch_history (batch_id, status, gladiator, arena)
-            VALUES (?, 'pending', ?, ?)
-        ''', (batch_id, run_config['gladiator'], run_config['arena']))
-
-        run_id = cursor.lastrowid  # Get the auto-generated run_id
-
-        # Now insert config key-value pairs using that run_id
-        for key, value in run_config.items():
-            serialized = self.serialize_value(key, value)
-            cursor.execute('''
-                INSERT INTO batch_details (batch_id, run_id, key, value)
-                VALUES (?, ?, ?, ?)
-            ''', (batch_id, run_id, key, serialized))
-
+        """Unknown key = missing column = loud sqlite failure. HOUSTON by design."""
+        row             = {key: self.serialize_value(key, value) for key, value in run_config.items()}
+        row["batch_id"] = batch_id
+        row["status"]   = "pending"
+        row["record_level"] = self.record_level()
+        cols            = ", ".join(row)
+        marks           = ", ".join("?" * len(row))
+        self.conn.cursor().execute(f"INSERT INTO batch_history ({cols}) VALUES ({marks})", list(row.values()))
         self.conn.commit()
 
+    def record_level(self):
+        """Setup ships 'Full'; the row carries 2. None means no request — display_need decides."""
+        name = getattr(self.hyper, "record_level", None)
+        return RecordLevel[name.upper()].value if name else None
     def get_valid_config_keys(self) -> set:
         """Get valid dimension keys from Config class attributes."""
         from src.NNA.engine.Config import Config
@@ -230,3 +173,32 @@ class BatchCreator:
         return validated
 
 
+    # BatchCreator.py  method: build_config_json  NEW: same JSON shape NF ships — one frozen truth for both launch paths
+    def build_config_json(self, dimensions) -> str:
+        dims  = self.serialize_dimensions(dimensions)
+        seeds = dims.pop("seed", [])
+        return json.dumps({
+            "gladiators":        self.hyper.gladiators,
+            "arenas":            self.hyper.arenas,
+            "seeds":             seeds,
+            "epochs_to_run":     self.hyper.epochs_to_run,
+            "training_set_size": self.hyper.training_set_size,
+            "dimensions":        dims,
+        })
+
+    # BatchCreator.py  method: serialize_dimensions  NEW: legos -> names, everything else JSON-native
+    def serialize_dimensions(self, dimensions) -> dict:
+        return {key: [self.serialize_value(key, v) for v in values]
+                for key, values in dimensions.items()}
+
+    # BatchCreator.py  method: count_expected_runs  NEW: gladiators x arenas x every dimension (seed included)
+    def count_expected_runs(self, dimensions) -> int:
+        total = len(self.hyper.gladiators) * len(self.hyper.arenas)
+        for values in dimensions.values(): total *= len(values)
+        return total
+
+    # BatchCreator.py  method: stamp_expected_runs  NEW: NF minted the row; the expander owns the truth on run count
+    def stamp_expected_runs(self, batch_id, dimensions):
+        self.conn.execute("UPDATE batch SET expected_runs = ? WHERE batch_id = ?",
+                          (self.count_expected_runs(dimensions), batch_id))
+        self.conn.commit()

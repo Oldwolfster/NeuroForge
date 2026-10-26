@@ -288,7 +288,7 @@ class PytorchExporter:
             "ReLU": "nn.ReLU()",
             "LeakyReLU": "nn.LeakyReLU(0.01)",
             "Leaky": "nn.LeakyReLU(0.01)",
-            "NoneDummmy": "None",
+            "Linear": "None",
         }
         return mapping.get(name, "None")
 

@@ -2,23 +2,42 @@ from src.NNA.legos.Activation import *
 from src.NNA.legos.Weight_initializer import *
 from src.NNA.legos.Loss import *
 from src.NNA.legos.Optimizer import *
-from src.NNA.legos.Scaler import Scaler_Robust, Scaler_Log, Scaler_NONE, Scaler_ZScore
-from src.NNA.utils.RamDB import RamDB
+from src.NNA.utils.db_conn import db_conn
+
 from pathlib import Path
 
+
+import math
+
 class HyperParameters():
+    @property
+    def nf_db(self):
+        if self.nf_db_handle is None: self.nf_db_handle = db_conn()
+        return self.nf_db_handle
+
+    # ArenaSettings.py  method: nf_db  NEW:  setter — build_hyper assigns the explicit path
+    @nf_db.setter
+    def nf_db(self, db):
+        self.nf_db_handle = db
+
     def __init__(self):
-        self.db_ram                  : RamDB = RamDB()
-        self.db_dsk                  : RamDB = RamDB(Path(__file__).parent.parent / "history" / "NF_history.db")
+        self.nf_db_handle           = None                                                  # NEW
+        self.reporter               = None  #Shard report for communicating to UI process
 
         ############################################################
         # BATTLE Parameters are set here                           #
         ############################################################
-        self.epochs_to_run           : int   = 262        # Number of times training run will cycle through all training data
-        self.training_set_size       : int   = 3       # Qty of training data
-        self.random_seed             : int   = 980963   # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
-        self.seed_replicates         : int   = 5         # Number of times to run each config with different random seeds (1 = no replication)
+        self.epochs_to_run           : int   = 50        # Number of times training run will cycle through all training data
+        self.training_set_size       : int   = 120       # Qty of training data
+        self.random_seed             : int   = 180589 #980963   # for seed 580636 - ONE EPOCH    #for seed 181026  DF LR 05 =9 but DF LR 4 = just 2 epochs    #for seed 946824, 366706 we got it in one!
+        #self.gladiators = ['AutoForgeNoScaler']  # ,'TitanicOpus']
+        self.gladiators = ['AutoForge']  # ,'TitanicOpus']
+        self.arenas = ['RepaymentFromCreditScore']
+
+        self.seed_replicates         : int   = 1         # Number of times to run each config with different random seeds (1 = no replication)
         self.nf_count                : int   = 2        # How many to display in NeuroForge
+        self.record_level            : str   = None
+        self.sweep_precision         : int   = 1
         self.display_train_data      : bool  = True      # Display the training data at the end of the rn.
         self.resume_batch            : bool  = False     # False = new batch, True = resume latest, or int = resume specific batch_id
         self.batch_name              : str   = ''
@@ -47,61 +66,31 @@ class HyperParameters():
         #ARCH_WILDCARD_MAX_NEURONS = 16  # Maximum neurons per layer
         #ARCH_WILDCARD_MIN_NEURONS = 1   # Minimum neurons per layer
 
-        self.dimensions = {"architecture": [[4, 2, 1]],#"architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
-            "loss_function": [Loss_MSE, Loss_BCE], #6, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
-            "batch_size": [1, 64],
-             #"hidden_activation": [Activation_Tanh]#6 666666666, Activation_Sigmoid]#, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
-             #"output_activation" : [Activation_Sigmoid]#, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
-            # "initializer": "*6",
-            #"seed":[1,2,3],
-            #"loss":  Loss_HalfWit,
-            "optimizer": [Optimizer_SGD, Optimizer_Adam],
+        #self.dimensions = {"architecture": [[4, 1]],#, [9, 6, 1]],#"architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
+        self.dimensions = {"architecture": [[2, 1]],  # , [9, 6, 1]],#"architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
+                           "batch_size": [50,1],
+                           "seed":      [980963, 230936, 149314, 401318, 180589],
+            "loss_function":[Loss_HalfWit,   Loss_BCE, Loss_SquaredHinge, Loss_MSE],#[Loss_SquaredHinge, Loss_Hinge],
+            "optimizer":[Optimizer_Opus]#, Optimizer_RProp, Optimizer_Adam]#   , Optimizer_RAdam] # [ Optimizer_RAdam]#, Optimizer_MoonPhase]#####################,Optimizer_SGD]
+                           }
+        self.dimensions = {
+            "architecture": [[2, 1]],
 
+
+            #"seed": [649691],
+                    #+ list(range(700001, 700046)),  # 5 known + 45 new = 50
+            "learning_rate":[.01],
+            "batch_size": [50, 1],
+            "optimizer": [Optimizer_Fable],
         }
+        self.dimensions = {}
 
-        self.dimensions_temp = {
-             "loss_function": [Loss_MSE, Loss_BCE, Loss_Huber, Loss_Hinge, Loss_LogCosh, Loss_HalfWit],
-             "hidden_activation": [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU,                                  Activation_NoDamnFunction],
-             "output_activation" : [Activation_Tanh, Activation_Sigmoid, Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction],
-             "initializer": "*",
-            "architecture": [[4, 4,3,4,4, 1], [2, 2, 1]],
-            "output_activation": [Activation_NoDamnFunction],
-            "seed":[1,2,3],
-            "loss":  Loss_HalfWit,
-            "optimizer": [Optimizer_SGD, Optimizer_Adam],
-             "batch_size": [1, 2, 4, 8, 999]
-        }
 
-        self.dimensions_TEST = {"architecture": [[4,4,1],[16,1]],#Passed
-                                #"seed": [1, 3, 5], #Passed
-                                #"hidden_activation": [Activation_TinyReLU], #Passed
-                                #"output_activation": [Activation_Sigmoid], #Passed
-                           "batch_size": [2],           # FAils -
-                           "input_scalers":[Scaler_ZScore],
-                            "optimizer": [Optimizer_AdaGrad, Optimizer_Nadam],  # Passed
-                           "loss_function": "*",              # FAILED    # Is in settings 💪 1 of 1-RepaymentFromCreditScore - these settings: {'seed': 181467, 'gladiator': 'AutoForge', 'arena': 'RepaymentFromCreditScore', 'architecture': [3, 2, 1], 'loss': 'Loss_HalfWit', 'optimizer': None, 'hidden_activation': None, 'output_activation': None, 'initializer': None, 'learning_rate': None, 'lr_specified': False}
-                            #FAILED "learning_rate":[.02]
-                            #FAILED,
-                            #FAILED"initializer": [Initializer_Orthogonal],
-
-        }
-        self.dimensions = {     "architecture": [[4, 1],[2,1]],
-                               "learning_rate":[.5],
-                                #"input_scalers": [Scaler_ZScore],
-                               #"weight_initializer": [Initializer_Orthogonal,Initializer_LeCun],
-                                #"seed": [8,10], #Passed
-                               #"hidden_activation": [Activation_Tanh, Activation_LeakyReLU], #Passed
-                               #"output_activation": [Activation_Sigmoid, Activation_Tanh],  # , Activation_LeakyReLU, Activation_ReLU, Activation_NoDamnFunction]
-                               #"batch_size": [1,4],# "batch_size":[1,2,3,4],
-                               "optimizer": [Optimizer_Adam],#6  ,Optimizer_Adam_NoHat,Optimizer_SGD], #"optimizer":[Optimizer_SGD, Optimizer_Adam, Optimizer_AdamW,        Optimizer_Momentum,Optimizer_AdaGrad,Optimizer_Adadelta,Optimizer_AdaMax,Optimizer_Adam_NoHat,Optimizer_SGD,Optimizer_Momentum,Optimizer_Adam_NoHat,Optimizer_SGD,Optimizer_Momentum,Optimizer_Adam_NoHat,Optimizer_RMSprop]
-                               }
-
-        self.gladiators=['AutoForge','AutoForgeDup'] #,'TitanicOpus']
-        self.gladiators = ['AutoForge']  # ,'TitanicOpus']
-        self.arenas = ['RepaymentFromCreditScore']
-        #self.arenas = ['CarValueFromMiles']
-        #self.arenas = ['Titanic8']
-        self.arenas = ['XOR']
+        self.arenas = ['Predict_Income_2_Inputs_Nonlinear']
+        self.arenas = ['Moons']
+        self.arenas = ['Titanic8']
+        self.arenas = ['SingleInput_CreditScore']
+        self.arenas = ['Real_CaliforniaHousing']
         self.arenasAll=[
             "Adversarial_Noise",
             "Arena_CenteredData",
@@ -192,7 +181,7 @@ class HyperParameters():
 - DONE Clean up Arenas
 - Rename batch table schema
 - DONE Hook optimizer parameters to the hyperparameters 
-- take run_id and bring it up in NF
+
 - add the geometry
 - Finish resume existing batch... existing code is not close
 

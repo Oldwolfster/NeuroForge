@@ -610,6 +610,7 @@ Optimizer_AdamW = StrategyOptimizer(
     state_per_weight=["m", "v"],  # ← AdamW needs momentum and velocity per weight
 )
 
+
 # ==============================================================================
 # ADADELTA OPTIMIZER (AdaGrad without learning rate!)
 # ==============================================================================
@@ -860,3 +861,318 @@ Optimizer_RAdam = StrategyOptimizer(
     state_per_weight=["m", "v"],  # ← RAdam needs momentum and velocity per weight
 )
 
+
+import math
+
+def moonphase_popup_info(neuron, weight_id, TRI):
+    """MoonPhase state display including the mystical Lunar Peek."""
+    m = neuron.optimizer_state['m'][weight_id]
+    v = neuron.optimizer_state['v'][weight_id]
+    t = TRI.timestep
+    b1, b2 = TRI.hyper.optimizer_beta1, TRI.hyper.optimizer_beta2
+
+    # Fake moon phase cycle (0-7 for new/waxing/crescent/first/full/gibbous/last/disseminating)
+    phase = t % 8
+    phase_names = ["New", "Waxing", "Crescent", "First Quarter", "Full", "Gibbous", "Last Quarter", "Disseminating"]
+    current_phase = phase_names[phase]
+
+    # Biased-corrected with lunar flavor
+    m_hat = m / (1 - b1 ** t) if t > 0 else 0
+    v_hat = v / (1 - b2 ** t) if t > 0 else 0
+
+    # Lunar 'peek' — waxing boosts, gibbous damps, crescent adds randomness
+    lunar_peek = m_hat * (1 + (phase / 8))  # Simplified mysticism
+
+    return {
+        "m": m,
+        "v": v,
+        "m_hat": m_hat,
+        "lunar_peek": lunar_peek,
+        "v_hat": v_hat,
+        "timestep": t,
+        "moon_phase": current_phase
+    }
+
+def moonphase_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """Calculates adjustment using moon phases for cosmic convergence."""
+    m = neuron.optimizer_state['m'][weight_id]
+    v = neuron.optimizer_state['v'][weight_id]
+    t = TRI.timestep
+    b1, b2, eps = TRI.hyper.optimizer_beta1, TRI.hyper.optimizer_beta2, TRI.hyper.optimizer_epsilon
+
+    # 1. Lunar-updated state (waxing boosts m, gibbous damps v)
+    phase = t % 8
+    lunar_boost = 1 + (phase / 8)  # 1.0 to 1.875
+    lunar_damp = 1 - (phase / 16)  # 1.0 to 0.5
+
+    m = b1 * m + (1 - b1) * avg_leverage * lunar_boost
+    v = b2 * v + (1 - b2) * (avg_leverage ** 2) * lunar_damp
+
+    # 2. Bias Correction (with crescent chaos if phase==2)
+    m_hat = m / (1 - b1 ** t) if t > 0 else 0
+    v_hat = v / (1 - b2 ** t) if t > 0 else 0
+    g_hat = avg_leverage / (1 - b1 ** t) if t > 0 else 0
+
+    if phase == 2:  # Crescent: Add epsilon chaos
+        g_hat += eps * math.sin(t)  # Fake randomness
+
+    # 3. MoonPhase Peek Logic
+    # Blend with lunar cycle for 'cosmic peek'
+    lunar_peek = (b1 * m_hat) + ((1 - b1) * g_hat) * (phase / 4)
+
+    # 4. Save EVERY piece of the lunar puzzle
+    neuron.optimizer_state['m'][weight_id] = m
+    neuron.optimizer_state['v'][weight_id] = v
+    neuron.optimizer_state['lunar_peek'][weight_id] = lunar_peek
+
+    lr = neuron.learning_rates[weight_id]
+    return lr * lunar_peek / (math.sqrt(v_hat) + eps)
+
+
+Optimizer_MoonPhase = StrategyOptimizer(
+    name="MoonPhase",
+    desc="Nadam but guided by the moon phases. Waxing boosts momentum, gibbous damps variance, crescent adds chaos. Because why not?",
+    when_to_use="Full moon nights or when MSE feels too earthly.",
+    best_for="fAstrological convergence in pseudoscientific architectures.",
+    fn_popup_info=moonphase_popup_info,
+    fn_adj_calc=moonphase_calculate_adjustment,
+    state_per_weight=["m", "v", "lunar_peek"],
+    popup_formula="Cosmic vibes: adjustment = lr * lunar_peek / sqrt(v_hat + eps)"
+)
+
+
+
+
+# Optimizer.py
+RPROP_ETA_PLUS  = 1.2       # step growth when the sign agrees with last time
+RPROP_ETA_MINUS = 0.5       # step shrink when the sign reverses -- the brake
+RPROP_STEP_MIN  = 1e-6
+RPROP_STEP_MAX  = 50.0
+
+
+def rprop_sign(value):
+    if value > 0:   return  1.0
+    if value < 0:   return -1.0
+    return 0.0
+
+def rprop_grow(step):
+    return min(step * RPROP_ETA_PLUS,  RPROP_STEP_MAX)
+
+def rprop_shrink(step):
+    return max(step * RPROP_ETA_MINUS, RPROP_STEP_MIN)
+
+def rprop_first_step(neuron, weight_id, step):
+    """State initializes to 0; seed the step from this weight's learning rate."""
+    if step != 0: return step
+    return neuron.learning_rates[weight_id]
+
+
+def rprop_popup_info(neuron, weight_id, TRI):
+    """RProp state for display. Magnitude of leverage is deliberately unused."""
+    step        = rprop_first_step(neuron, weight_id, neuron.optimizer_state['step'][weight_id])
+    prev        = neuron.optimizer_state['prev_leverage'][weight_id]
+
+    return {
+        "step":             step,
+        "prev leverage":    prev,
+        "prev direction":   rprop_sign(prev),
+        "eta+":             RPROP_ETA_PLUS,
+        "eta-":             RPROP_ETA_MINUS,
+    }
+
+
+def rprop_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """
+    iRprop-: step size is per weight and moves ONLY on sign agreement/disagreement.
+    Agree   -> grow the step   (accelerate down a consistent slope)
+    Reverse -> shrink the step AND sit out this update (we jumped over the minimum)
+    The magnitude of avg_leverage is never used -- that is what makes a vanishing
+    gradient harmless and an exploding one no more dangerous than any other.
+    """
+    step        = rprop_first_step(neuron, weight_id, neuron.optimizer_state['step'][weight_id])
+    prev        = neuron.optimizer_state['prev_leverage'][weight_id]
+    agreement   = prev * avg_leverage
+
+    if   agreement > 0: step = rprop_grow(step)
+    elif agreement < 0: step = rprop_shrink(step);  avg_leverage = 0.0   # reversed: brake and skip
+
+    neuron.optimizer_state['step'][weight_id]           = step
+    neuron.optimizer_state['prev_leverage'][weight_id]  = avg_leverage
+
+    return rprop_sign(avg_leverage) * step
+
+
+Optimizer_RProp = StrategyOptimizer(
+    name="RProp",
+    desc="Resilient backpropagation. Per-weight step sizes driven by gradient SIGN only; magnitude is discarded.",
+    when_to_use="Full-batch training. Immune to vanishing and exploding gradients.",
+    best_for="Small datasets, saturating activations, shallow networks. Riedmiller & Braun, 1993.",
+    fn_popup_info=rprop_popup_info,
+    fn_adj_calc=rprop_calculate_adjustment,
+    state_per_weight=["step", "prev_leverage"],   # ← per-weight step size is the whole idea
+)
+
+# ══════════════════════════════════════════════════════════════
+# FABLE — every weight learns from the story, not the shouting.
+# Direction from the fast storyline; stride earned by agreement
+# between fast and slow storylines. Magnitude testifies (moves
+# the EMAs) but never sets the step. Epsilon-free, sqrt-free,
+# unit-invariant: rescale an input 1000x, same behavior.
+# ══════════════════════════════════════════════════════════════
+FABLE_GROW   = 1.15     # stride grows 15% while storylines agree
+FABLE_SHRINK = 0.55     # stride nearly halves on a plot twist (overshoot signature)
+FABLE_MAX    = 50.0     # stride ceiling, in multiples of base lr
+FABLE_MIN    = 0.001    # stride floor,   in multiples of base lr
+
+
+def fable_popup_info(neuron, weight_id, TRI):
+    """Read-only view of the two storylines and the earned stride."""
+    m_fast  = neuron.optimizer_state['m_fast'][weight_id]
+    m_slow  = neuron.optimizer_state['m_slow'][weight_id]
+    step    = neuron.optimizer_state['step'][weight_id]
+    lr      = neuron.learning_rates[weight_id]
+
+    return {
+        "m_fast": m_fast, # (recent story)
+        "m_slow":   m_slow, #(long story)
+        "agreement":             1.0 if m_fast * m_slow > 0 else (-1.0 if m_fast * m_slow < 0 else 0.0),
+        "stride":   step if step > 0 else lr, # (per-weight)
+        "direction":             1.0 if m_fast > 0 else (-1.0 if m_fast < 0 else 0.0),
+        "timestep":              TRI.timestep,
+    }
+
+
+def fable_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """Fable: stride earned by story-consistency, direction by the fast storyline."""
+    m_fast  = neuron.optimizer_state['m_fast'][weight_id]   # Get current state
+    m_slow  = neuron.optimizer_state['m_slow'][weight_id]   # Get current state
+    step    = neuron.optimizer_state['step'][weight_id]     # Get current state
+    beta1   = TRI.hyper.optimizer_beta1                     # fast storyline decay (~0.9)
+    beta2   = TRI.hyper.optimizer_beta2                     # slow storyline decay (~0.999)
+    lr      = neuron.learning_rates[weight_id]
+
+    # Both storylines hear the testimony
+    m_fast  = beta1 * m_fast + (1 - beta1) * avg_leverage
+    m_slow  = beta2 * m_slow + (1 - beta2) * avg_leverage
+
+    # First step: stride bootstraps from base lr
+    if step <= 0: step = lr
+
+    # Agreement earns stride; a plot twist cuts it
+    if   m_fast * m_slow > 0: step = min(step * FABLE_GROW,   lr * FABLE_MAX)
+    elif m_fast * m_slow < 0: step = max(step * FABLE_SHRINK, lr * FABLE_MIN)
+
+    # Save updated state
+    neuron.optimizer_state['m_fast'][weight_id] = m_fast
+    neuron.optimizer_state['m_slow'][weight_id] = m_slow
+    neuron.optimizer_state['step'][weight_id]   = step
+
+    # Pure direction x earned stride — magnitude never touches the step
+    direction = 1.0 if m_fast > 0 else (-1.0 if m_fast < 0 else 0.0)
+    return step * direction
+
+
+Optimizer_Fable = StrategyOptimizer(
+    name="Fable",
+    desc="Sign-of-momentum steps with per-weight stride earned by agreement between fast and slow gradient storylines. Magnitude testifies; consistency decides.",
+    when_to_use="When Adam's adaptive denominator feels twitchy, when inputs are unscaled, or when you want one LR to just work across wildly different weight scales.",
+    best_for="Unnormalized data, wide stable-LR windows, and watching per-weight strides tell the story in the popup.",
+    fn_popup_info=fable_popup_info,
+    fn_adj_calc=fable_calculate_adjustment,
+    state_per_weight=["m_fast", "m_slow", "step"],   # ← two storylines + earned stride per weight
+    # m_fast: short EMA of leverage — what the blame says lately (sets direction).
+    # m_slow: long EMA of leverage — what it's said all along (the moral).
+    # step:   per-weight stride — grows on agreement, cut sharply on plot twists.
+)
+
+
+# ══════════════════════════════════════════════════════════════
+# OPUS — Fable's storylines, RProp's reflexes.
+# Direction from the fast storyline (momentum: robust to one loud sample).
+# Stride from RAW consecutive signs (reflex: catches an overshoot next update).
+# Silence is NOT consent -- a dead gradient means we went too far, so we retreat.
+# ══════════════════════════════════════════════════════════════
+OPUS_GROW   = 1.15      # stride grows while raw signs agree
+OPUS_SHRINK = 0.55      # stride cut on a sign reversal -- we stepped over the minimum
+OPUS_QUIET  = 0.85      # stride decays when leverage dies -- saturation, not agreement
+OPUS_MAX    = 50.0      # ceiling, in multiples of base lr
+OPUS_MIN    = 0.001     # floor,   in multiples of base lr
+
+
+def opus_verdict(prev_leverage, avg_leverage):
+    """1 = agree, -1 = overshoot, 0 = silence (dead gradient). No history holds steady."""
+    if avg_leverage  == 0:  return  0                    # ← silence: the gradient died
+    if prev_leverage == 0:  return  2                    # ← no history yet: hold, do not decay
+    if prev_leverage * avg_leverage > 0:    return  1
+    return -1
+
+
+def opus_next_stride(step, lr, verdict):
+    """Grow on agreement, brake on reversal, decay on silence, hold when there is no history."""
+    if verdict ==  2:   return step                       # ← ADD: first step, no evidence either way
+    if verdict ==  1:   return min(step * OPUS_GROW,   lr * OPUS_MAX)
+    if verdict == -1:   return max(step * OPUS_SHRINK, lr * OPUS_MIN)
+    return              max(step * OPUS_QUIET,  lr * OPUS_MIN)
+
+
+def opus_direction(m_fast):
+    if m_fast > 0:  return  1.0
+    if m_fast < 0:  return -1.0
+    return 0.0
+
+
+def opus_popup_info(neuron, weight_id, TRI):
+    """Read-only view. 'verdict' is the whole story: 1 agree, -1 overshoot, 0 silence."""
+    m_fast  = neuron.optimizer_state['m_fast'][weight_id]
+    m_slow  = neuron.optimizer_state['m_slow'][weight_id]
+    step    = neuron.optimizer_state['step'][weight_id]
+    prev    = neuron.optimizer_state['prev_leverage'][weight_id]
+    lr      = neuron.learning_rates[weight_id]
+
+    return {
+        "m_fast":       m_fast,                                 # recent story -- sets direction
+        "m_slow":       m_slow,                                 # long story  -- context only
+        "prev leverage": prev,                                  # raw, one update ago
+        #"verdict":      opus_verdict(prev, 0.0) if False else 0, # filled live below
+        "verdict": neuron.optimizer_state['verdict'][weight_id],
+        "stride":       step if step > 0 else lr,
+        "direction":    opus_direction(m_fast),
+        "stride / lr":  (step if step > 0 else lr) / lr if lr else 0,
+        "timestep":     TRI.timestep,
+    }
+
+
+def opus_calculate_adjustment(neuron, weight_id, TRI, avg_leverage):
+    """Momentum decides WHERE. Raw sign history decides HOW FAR. Silence means retreat."""
+    m_fast  = neuron.optimizer_state['m_fast'][weight_id]
+    m_slow  = neuron.optimizer_state['m_slow'][weight_id]
+    step    = neuron.optimizer_state['step'][weight_id]
+    prev    = neuron.optimizer_state['prev_leverage'][weight_id]
+    beta1   = TRI.hyper.optimizer_beta1
+    beta2   = TRI.hyper.optimizer_beta2
+    lr      = neuron.learning_rates[weight_id]
+
+    m_fast  = beta1 * m_fast + (1 - beta1) * avg_leverage
+    m_slow  = beta2 * m_slow + (1 - beta2) * avg_leverage
+    if step <= 0: step = lr
+
+    verdict = opus_verdict  (prev, avg_leverage)
+    step    = opus_next_stride(step, lr, verdict)
+    neuron.optimizer_state['verdict'][weight_id] = verdict
+    neuron.optimizer_state['m_fast'][weight_id]         = m_fast
+    neuron.optimizer_state['m_slow'][weight_id]         = m_slow
+    neuron.optimizer_state['step'][weight_id]           = step
+    neuron.optimizer_state['prev_leverage'][weight_id]  = avg_leverage
+
+    return step * opus_direction(m_fast)
+
+
+Optimizer_Opus = StrategyOptimizer(
+    name="Opus",
+    desc="Fable's momentum direction with RProp's raw sign-reversal brake. A dead gradient decays the stride instead of earning it.",
+    when_to_use="Saturating activations, online updates, anywhere Fable runs away or RProp collapses.",
+    best_for="Recovering from saturation instead of dying in it.",
+    fn_popup_info=opus_popup_info,
+    fn_adj_calc=opus_calculate_adjustment,
+    state_per_weight=["m_fast", "m_slow", "step", "prev_leverage", "verdict"],
+)

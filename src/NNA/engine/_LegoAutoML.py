@@ -4,12 +4,16 @@ from typing import Any
 
 
 class LegoAutoML:
-    def __init__(self, ok_to_print):
-        self.applied_rules = []
-        self.seen_prints = set()
-        self.applied_pairs = set()
+    def __init__(self, ok_to_print,conn=None, batch_id=None, run_id=None):
+        self.applied_rules  = []
+        self.seen_prints    = set()
+        self.applied_pairs  = set()
 
-        self.ok_to_print = ok_to_print
+        self.ok_to_print    = ok_to_print
+        self.conn           = conn
+        self.batch_id       = batch_id
+        self.run_id         = run_id
+        self.seq            = 0
 
         if (self.ok_to_print):
             print(f"\t🧠🧠 Welcome to 'Smart Configuration' Anything not set in your model will be set to optimal conditions(hopefully) 🧠🧠")
@@ -26,19 +30,17 @@ class LegoAutoML:
     def apply(self, config, rules):
         # track which rule‐indices we’ve applied (and to what value)
         # keep running until no rule makes an actual change
-
+        self.automl_log_clear()
         while self.apply_single_rule(config, rules):
             pass
 
+
     def apply_single_rule(self, config, rules) -> bool:
-        """
-        Returns True if it applied one rule (and mutated config).
-        """
         sorted_rules = sorted(rules, key=lambda rule: rule[1])
 
         for idx, (override, priority, action, condition) in enumerate(sorted_rules):
             try:
-                condition_result = self._safe_eval(condition, config)
+                condition_result = self.safe_eval(condition, config)
 
                 if condition_result:
                     for key, value in action.items():
@@ -48,14 +50,16 @@ class LegoAutoML:
                                 (not override and current is None)
                         )
 
-                        # Skip output if we've already printed the 🧠 for this pair
                         if (priority, key) not in self.applied_pairs:
                             if should_apply:
-                                self.maybe_print(f"\t🧠{priority}: {key} = {value}")
-                                self.applied_pairs.add((priority, key))  # Mark as applied
+                                msg = f"\t🧠{priority}: {key} = {value}"
+                                self.maybe_print(msg)
+                                self.applied_pairs.add((priority, key))
+                                self.automl_log_step(priority, key, str(value), 1, override, condition, msg)
                             else:
-                                self.maybe_print(
-                                    f"\t⏭️{priority}: {key} SKIPPED (current={current}, override={override})")
+                                msg = f"\t⏭️{priority}: {key} SKIPPED (current={current}, override={override})"
+                                self.maybe_print(msg)
+                                self.automl_log_step(priority, key, str(value), 0, override, condition, msg)
 
                         if should_apply:
                             setattr(config, key, value)
@@ -67,19 +71,18 @@ class LegoAutoML:
                             })
                             return True
                 else:
-                    # Condition was False - show why
-
                     for key in action.keys():
-                        # Skip output if we've already applied this pair
                         if (priority, key) not in self.applied_pairs:
-                            self.maybe_print(f"\t❌{priority}: {key} BLOCKED (condition False: '{condition}')")
+                            msg = f"\t❌{priority}: {key} BLOCKED (condition False: '{condition}')"
+                            self.maybe_print(msg)
+                            self.automl_log_step(priority, key, "", 0, override, condition, msg)
 
             except Exception as e:
                 print(f"⚠️ Rule failed: {priority} {condition} -> {e}")
 
         return False
 
-    def _safe_eval(self, condition: str, config: object) -> bool:
+    def safe_eval(self, condition: str, config: object) -> bool:
         tokens = condition.strip().split()
         if not tokens:
             return False
@@ -98,4 +101,19 @@ class LegoAutoML:
         return bool(eval(condition, {}, config.__dict__))
 
 
+    def automl_log_clear(self):
+        if not self.conn: return
+        self.conn.execute(
+            "DELETE FROM log_automl WHERE batch_id = ? AND run_id = ?",
+            (self.batch_id, self.run_id)
+        )
+        self.conn.commit()
 
+    def automl_log_step(self, priority, setting, value, applied, override, condition, message):
+        if not self.conn: return
+        self.seq += 1
+        self.conn.execute(
+            "INSERT INTO log_automl (batch_id, run_id, seq, priority, setting, value, applied, override, condition, message) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (self.batch_id, self.run_id, self.seq, str(priority), setting, value, int(applied), int(override), condition, message)
+        )
+        self.conn.commit()

@@ -26,7 +26,7 @@ class PytorchExporter:
         sections = [
             self.build_header(),
             self.build_training_data(),
-            #self.build_scalers(),
+            self.build_scalers(),
             self.build_model_class(),
             self.build_training_loop(),
             self.build_main(),
@@ -126,6 +126,114 @@ class PytorchExporter:
         ]
         return "\n".join(lines)
 
+
+
+    def build_scalers(self):
+        """Generate sklearn-compatible scaler setup based on NNA MultiScaler configuration."""
+        multi_scaler = self.TRI.config.scaler
+
+        lines = [
+            "# Scaler Configuration",
+            "from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler",
+            "import numpy as np",
+            "",
+        ]
+
+        # Check if any scaling is applied
+        if not multi_scaler.inputs_are_scaled and not multi_scaler.target_is_scaled:
+            lines.extend([
+                "# No scaling applied in NNA - using raw data",
+                "def scale_data(X_raw, Y_raw):",
+                "    return X_raw, Y_raw",
+            ])
+            return "\n".join(lines)
+
+        # Build scaler initialization code
+        lines.append("# Initialize scalers per feature")
+        lines.append("INPUT_SCALERS = []")
+
+        for i, scaler in enumerate(multi_scaler.scalers[:-1]):  # All but target
+            scaler_code = self.map_scaler_to_sklearn(scaler, i)
+            lines.append(scaler_code)
+
+        # Target scaler
+        target_scaler = multi_scaler.scalers[-1]
+        lines.append("")
+        lines.append("# Target scaler")
+        lines.append(self.map_scaler_to_sklearn(target_scaler, -1, is_target=True))
+
+        # Build scale_data function
+        lines.extend([
+            "",
+            "def scale_data(X_raw, Y_raw):",
+            "    '''Apply NNA scaling configuration to raw data.'''",
+            "    X_array = np.array(X_raw)",
+            "    Y_array = np.array(Y_raw).reshape(-1, 1)",
+            "    ",
+            "    # Scale inputs feature-by-feature",
+            "    X_scaled = X_array.copy()",
+            "    for i, scaler in enumerate(INPUT_SCALERS):",
+            "        if scaler is not None:",
+            "            X_scaled[:, i] = scaler.fit_transform(X_array[:, i].reshape(-1, 1)).flatten()",
+            "    ",
+            "    # Scale target",
+            "    if TARGET_SCALER is not None:",
+            "        Y_scaled = TARGET_SCALER.fit_transform(Y_array).flatten()",
+            "    else:",
+            "        Y_scaled = Y_array.flatten()",
+            "    ",
+            "    # Debug output",
+            "    print(f'Scaled inputs (first 3): {X_scaled[:3].tolist()}')",
+            "    print(f'Scaled targets (first 3): {Y_scaled[:3].tolist()}')",
+            "    ",
+            "    return X_scaled.tolist(), Y_scaled.tolist()",
+        ])
+
+        return "\n".join(lines)
+
+    # PytorchExporter.py
+
+    def map_scaler_to_sklearn(self, scaler, index, is_target=False):
+        """Map NNA scaler to sklearn initialization code."""
+
+        if scaler.name == "Z-Score":
+            sklearn_scaler = "StandardScaler()"
+            comment = "Z-Score"
+            if scaler.params:
+                mean = scaler.params.get('mean', 0)
+                std = scaler.params.get('std', 1)
+                comment = f"Z-Score: mean={mean:.4f}, std={std:.4f}"
+
+        elif scaler.name == "Min-Max":
+            sklearn_scaler = "MinMaxScaler(feature_range=(0, 1))"
+            comment = "Min-Max [0,1]"
+
+        elif scaler.name == "Min-Max-Zero-Centered":
+            sklearn_scaler = "MinMaxScaler(feature_range=(-1, 1))"
+            comment = "Min-Max [-1,1]"
+
+        elif scaler.name == "Robust":
+            sklearn_scaler = "RobustScaler()"
+            comment = "Robust (median/IQR)"
+
+        elif scaler.name == "Max-Abs":
+            sklearn_scaler = "MinMaxScaler(feature_range=(-1, 1))"
+            comment = "Max-Abs approximation"
+
+        elif scaler.name == "No Scaling":
+            sklearn_scaler = "None"
+            comment = "No scaling"
+
+        else:
+            sklearn_scaler = "None"
+            comment = f"Unsupported scaler: {scaler.name}"
+
+        # Format the line
+        if is_target:
+            return f"TARGET_SCALER = {sklearn_scaler}  # {comment}"
+        else:
+            return f"INPUT_SCALERS.append({sklearn_scaler})  # {comment}"
+
     def build_initial_weights_constant(self, weights_dict):
         """Format initial weights as Python dict constant."""
         lines = [
@@ -149,7 +257,7 @@ class PytorchExporter:
             "ReLU": "nn.ReLU()",
             "LeakyReLU": "nn.LeakyReLU(0.01)",
             "Leaky": "nn.LeakyReLU(0.01)",
-            "NoneDummmy": "None",
+            "Linear": "None",
         }
         return mapping.get(name, "None")
 
@@ -316,59 +424,6 @@ class PytorchExporter:
 
         return "\n".join(lines)
 
-    def build_db_logging_function_orig(self):
-        """Generate function to log weights to SQLite DB."""
-        lines = [
-            "def log_weights_to_db(model, epoch):",
-            '    """Write all weights to SQLite database."""',
-            "    if COMPARISON_DB is None:",
-            "        return",
-            "    ",
-            "    import sqlite3",
-            #"    conn = sqlite3.connect(COMPARISON_DB)",
-            "    import os",
-            "    script_dir = os.path.dirname(os.path.abspath(__file__))",
-            "    db_path = os.path.join(script_dir, COMPARISON_DB)",
-            "    conn = sqlite3.connect(db_path)",
-
-
-            "    cursor = conn.cursor()",
-            "    ",
-            "    cursor.execute('DROP TABLE IF EXISTS pytorch_weights;')",
-            "",
-            "    #6 Create table if not exists",
-            "    cursor.execute('''",
-            "        CREATE TABLE IF NOT EXISTS pytorch_weights (",
-            "            epoch INTEGER,",
-            "            layer INTEGER,",
-            "            neuron INTEGER,",
-            "            weight_index INTEGER,",
-            "            weight_value REAL,",
-            "            PRIMARY KEY (epoch, layer, neuron, weight_index)",
-            "        )",
-            "    ''')",
-            "    ",
-            "    with torch.no_grad():",
-            "        for layer_idx, layer in enumerate(model.layers):",
-            "            for neuron_idx in range(layer.out_features):",
-            "                # Bias is weight_index 0",
-            "                bias_val = layer.bias[neuron_idx].item()",
-            "                cursor.execute(",
-            '                    "INSERT OR REPLACE INTO pytorch_weights VALUES (?, ?, ?, ?, ?)",',
-            "                    (epoch, layer_idx, neuron_idx, 0, bias_val)",
-            "                )",
-            "                ",
-            "                # Input weights are weight_index 1, 2, ...",
-            "                for w_idx, w_val in enumerate(layer.weight[neuron_idx]):",
-            "                    cursor.execute(",
-            '                        "INSERT OR REPLACE INTO pytorch_weights VALUES (?, ?, ?, ?, ?)",',
-            "                        (epoch, layer_idx, neuron_idx, w_idx + 1, w_val.item())",
-            "                    )",
-            "    ",
-            "    conn.commit()",
-            "    conn.close()",
-        ]
-        return "\n".join(lines)
 
     def build_db_logging_function(self):
         """Generate function to log weights to SQLite DB."""
@@ -457,8 +512,8 @@ class PytorchExporter:
             '    print("=" * 60)',
             "    ",
             "    # Scale the data",
-            "    #X_scaled, Y_scaled = scale_data(X_RAW, Y_RAW)",
-            "    X_scaled, Y_scaled = X_RAW, Y_RAW  # Temporarily removed scaler"
+            "    X_scaled, Y_scaled = scale_data(X_RAW, Y_RAW)",
+            "    #X_scaled, Y_scaled = X_RAW, Y_RAW  # Temporarily removed scaler"
             "    ",
             '    print(f"Training data: {len(X_scaled)} samples, {len(X_scaled[0])} features")',
             '    print(f"Architecture: {ARCHITECTURE}")',

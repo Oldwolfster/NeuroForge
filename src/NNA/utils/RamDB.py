@@ -21,6 +21,7 @@ class RamDB:
             path = Path(path).resolve()
             path.parent.mkdir(parents=True, exist_ok=True)
             db_path = str(path)
+
             self.is_memory = False
 
         self.conn = sqlite3.connect(db_path, isolation_level=None)

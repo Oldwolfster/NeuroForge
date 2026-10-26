@@ -67,30 +67,21 @@ def dynamic_instantiate(filename, steps_up, path_down, *args):
 
 from src.NNA.engine.TrainingData import TrainingData
 
+# dynamic_instantiate.py  function: instantiate_arena  Update: BaseArena v2 — one return shape, no tuple sniffing
 
 def instantiate_arena(arena_name, training_set_size):
     """
     Instantiate an arena and return TrainingData.
 
     Args:
-        arena_name: Name of the arena file (without .py)
+        arena_name:        Name of the arena file (without .py)
         training_set_size: Number of samples to generate
     """
-    arena = dynamic_instantiate(arena_name, 1, "coliseum/arenas", training_set_size)
-    arena.arena_name = arena_name
-    src = arena.source_code
+    arena                   = dynamic_instantiate(arena_name, 1, "coliseum/arenas", training_set_size)
+    arena.arena_name        = arena_name
+    rows, fields, outcomes  = arena.training_data()
 
-    result = arena.generate_training_data_with_or_without_labels()
-
-    if isinstance(result, tuple):
-        data = result[0]
-        feature_labels = result[1] if len(result) > 1 else []
-        target_labels = result[2] if len(result) > 2 else []
-        td = TrainingData(data, feature_labels, target_labels)
-    else:
-        data = result
-        td = TrainingData(data)
-
-    td.source_code = src
-    td.arena_name = arena_name
+    td                      = TrainingData(rows, fields, outcomes)
+    td.source_code          = arena.source_code
+    td.arena_name           = arena_name
     return td
